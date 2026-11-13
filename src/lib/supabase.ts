@@ -11,6 +11,27 @@ export const supabase = createClient(url ?? 'https://example.supabase.co', key ?
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
+/**
+ * Is er een geldige inlogsessie? Zonder sessie geeft de database lege antwoorden (geen foutmelding),
+ * en die mogen nooit voor "de lijst is leeg" worden aangezien. Bij haperend bereik kan het verversen
+ * van de sessie mislukken; dan wachten we liever tot het weer lukt.
+ */
+export async function authed(): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session;
+  } catch {
+    return false;
+  }
+}
+
+/** Tijdslimiet voor een verzoek: in de winkel blijft een verzoek eerder hangen dan dat het netjes mislukt. */
+export function limit(ms = 10_000): AbortSignal {
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
 /** Server-functie aanroepen met het inlogtoken van deze telefoon. */
 export async function api<T>(path: string, body: unknown): Promise<T> {
   const { data } = await supabase.auth.getSession();

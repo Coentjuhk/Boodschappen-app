@@ -20,7 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Alleen wat niet recent is opgehaald. Zo kan dit adres geen kwaad als iemand het vaak aanroept.
     const since = new Date(Date.now() - STALE_MS).toISOString();
-    const { data: fresh } = await db.from('prices').select('query').is('household_id', null).gt('fetched_at', since).limit(5000);
+    // (Rijen zonder match-niveau zijn van vóór de opschoning en tellen niet als vers.)
+    const { data: fresh } = await db.from('prices').select('query').is('household_id', null).not('match', 'is', null).gt('fetched_at', since).limit(5000);
     const freshSet = new Set((fresh ?? []).map((r: { query: string }) => r.query));
     const todo = all.filter((q) => !freshSet.has(q) && (tried.get(q) ?? 0) < Date.now() - STALE_MS);
 

@@ -69,7 +69,8 @@ async function supabase(route) {
     return json(route, db.prices.filter((p) => !p.household_id && list.includes(p.query)));
   }
   if (table === 'items') {
-    if (m === 'GET') return json(route, db.items);
+    // Net als de echte database: zonder inlogsessie krijg je een lege lijst terug, géén foutmelding.
+    if (m === 'GET') return json(route, req.headers()['authorization'] === 'Bearer t' ? db.items : []);
     if (m === 'POST') {
       for (const row of [].concat(body)) {
         if (db.items.some((i) => i.id === row.id)) return json(route, { message: 'duplicate key', code: '23505' }, 409);
@@ -180,6 +181,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.click('.addbar button.primary');
   await sleep(300);
   ok(db.items.find((i) => i.id === 'i-melk').quantity === 2, 'nog een keer "Melk" hoogt het aantal op');
+
+  console.log('7b. Inlogsessie valt weg (haperend bereik): de lijst mag niet leeg raken');
+  const before = (await rowNames(page)).length;
+  await page.evaluate(() => { Object.keys(localStorage).filter((k) => k.startsWith('sb-')).forEach((k) => localStorage.removeItem(k)); window.dispatchEvent(new Event('online')); });
+  await sleep(1500);
+  ok(before > 0 && (await rowNames(page)).length === before, 'lijst blijft staan');
+  ok(JSON.parse(await page.evaluate(() => localStorage.getItem('bs.hh1.items'))).length > 0, 'ook de kopie op de telefoon blijft intact');
   await ctx.close();
 
   console.log('8. Uitnodiging voor een andere lijst');

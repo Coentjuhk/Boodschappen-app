@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, supabase } from './supabase';
+import { api, authed, limit, supabase } from './supabase';
 import type { Household, Item, Pins, PriceRow, Store } from './types';
 import { applyOps, classify, enqueue, uuid, type Op } from './outbox';
 import { load, remove, save } from './local';
@@ -68,11 +68,15 @@ export function useSession() {
 
   useEffect(() => {
     start();
+    // Sessie later weggevallen (bv. ingetrokken)? Dan opnieuw aanmelden met het account van deze telefoon.
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') { done.current = false; start(); }
+    });
     // Zonder bereik gestart? Opnieuw proberen zodra er weer verbinding is.
     const retry = () => { if (document.visibilityState === 'visible') start(); };
     window.addEventListener('online', retry);
     document.addEventListener('visibilitychange', retry);
-    return () => { window.removeEventListener('online', retry); document.removeEventListener('visibilitychange', retry); };
+    return () => { sub.subscription.unsubscribe(); window.removeEventListener('online', retry); document.removeEventListener('visibilitychange', retry); };
   }, [start]);
   return { userId, error, retry: start };
 }
@@ -91,8 +95,10 @@ export function useHousehold(userId: string | null) {
 
   const reload = useCallback(async () => {
     if (!userId) return;
+    // Zonder geldige sessie zou het antwoord "nergens lid van" zijn: dan niets overnemen.
+    if (!(await authed())) { setLoading(false); return; }
     const { data, error, status } = await supabase
-      .from('members').select('created_at, households(*)').eq('user_id', userId).order('created_at', { ascending: false });
+      .from('members').select('created_at, households(*)').eq('user_id', userId).order('created_at', { ascending: false }).abortSignal(limit());
     if (error) {
       if (/does not exist|schema cache/i.test(error.message)) {
         setSetupError('De database is nog niet klaargezet. Plak supabase/schema.sql in Supabase (SQL Editor → Run) en herlaad.');
@@ -102,6 +108,7 @@ export function useHousehold(userId: string | null) {
       setLoading(false);
       return;
     }
+    if (!(await authed())) { setLoading(false); return; } // sessie viel weg tijdens het ophalen
     const all = ((data ?? []) as unknown as { households: Household | null }[]).map((m) => m.households).filter((h): h is Household => !!h);
     // De lijst die je het laatst gebruikte; anders de lijst waar je het laatst lid van werd.
     adopt(all.find((h) => h.id === current.current?.id) ?? all[0] ?? null);
@@ -207,17 +214,19 @@ export function useLiveData(householdId: string | undefined) {
   /** Wachtrij versturen. Stopt bij een verbindingsprobleem en probeert het later opnieuw. */
   const flush = useCallback(async (): Promise<boolean> => {
     while (outbox.current.length) {
+      // Zonder sessie zou "aanpassen" stilletjes niets doen: dan wachten tot er weer een sessie is.
+      if (!(await authed())) { setOffline(true); return false; }
       const op = outbox.current[0];
       sending.current = true;
       let result;
       try {
         if (op.t === 'insert') {
           const { created_at: _c, updated_at: _u, ...row } = op.row;
-          result = classify(await supabase.from('items').insert(row));
+          result = classify(await supabase.from('items').insert(row).abortSignal(limit()));
         } else if (op.t === 'update') {
-          result = classify(await supabase.from('items').update(op.patch).eq('id', op.id));
+          result = classify(await supabase.from('items').update(op.patch).eq('id', op.id).abortSignal(limit()));
         } else {
-          result = classify(await supabase.from('items').delete().eq('id', op.id));
+          result = classify(await supabase.from('items').delete().eq('id', op.id).abortSignal(limit()));
         }
       } catch {
         result = 'later' as const;
@@ -238,15 +247,18 @@ export function useLiveData(householdId: string | undefined) {
   const sync = useCallback(() => run(async () => {
     if (!hh) return;
     if (!(await flush())) return;
+    if (!(await authed())) { setOffline(true); return; }
     dirty.current = false;
     const [i, s] = await Promise.all([
-      supabase.from('items').select('*').eq('household_id', hh).order('created_at'),
-      supabase.from('stores').select('*').eq('household_id', hh).order('sort'),
+      supabase.from('items').select('*').eq('household_id', hh).order('created_at').abortSignal(limit()),
+      supabase.from('stores').select('*').eq('household_id', hh).order('sort').abortSignal(limit()),
     ]);
     if (i.error || s.error) {
       setOffline(isNetworkError(i.error, i.status) || isNetworkError(s.error, s.status));
       return;
     }
+    // Sessie weggevallen terwijl we ophaalden? Dan is het antwoord mogelijk leeg: niet overnemen.
+    if (!(await authed())) { setOffline(true); return; }
     setOffline(false);
     if (!dirty.current) server.current = i.data as Item[];
     setStores(s.data as Store[]);
@@ -331,11 +343,12 @@ export function useLiveData(householdId: string | undefined) {
     // In porties: de database geeft hooguit 1000 rijen per vraag terug.
     const chunks: string[][] = [];
     for (let i = 0; i < qs.length; i += 40) chunks.push(qs.slice(i, i + 40));
+    if (!(await authed())) return;
     const results = await Promise.all([
-      supabase.from('prices').select('*').eq('household_id', hh).limit(2000),
-      ...chunks.map((c) => supabase.from('prices').select('*').is('household_id', null).in('query', c)),
+      supabase.from('prices').select('*').eq('household_id', hh).limit(2000).abortSignal(limit()),
+      ...chunks.map((c) => supabase.from('prices').select('*').is('household_id', null).in('query', c).abortSignal(limit())),
     ]);
-    if (results.some((r) => r.error)) return; // geen verbinding: de bewaarde prijzen blijven staan
+    if (results.some((r) => r.error) || !(await authed())) return; // geen verbinding: de bewaarde prijzen blijven staan
     const rows = results.flatMap((r) => (r.data as PriceRow[]) ?? []);
     setPrices(rows);
     setPricesFor(forKey);
@@ -353,7 +366,7 @@ export function useLiveData(householdId: string | undefined) {
     const isFresh = (q: string) => prices.some((p) => p.query === q && !p.household_id && p.match != null && p.fetched_at > since);
     const todo = (only ?? latestQueries.current.filter((q) => !isFresh(q) && !((tried[q] ?? 0) > now - 6 * 3600e3)))
       .filter((q) => q && !fetching.current.has(q));
-    if (!todo.length) return;
+    if (!todo.length || !(await authed())) return;
     todo.forEach((q) => fetching.current.add(q));
     setRefreshing(true);
     const errs = new Set<string>();
