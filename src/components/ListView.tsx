@@ -98,7 +98,7 @@ export default function ListView({ household, data, saveSettings, me }: {
               {totalSavings > 0 && <span className="save"> · {euro(totalSavings)} voordeel</span>}
             </div>
             {result.warnings.map((w) => <div key={w} className="warn small">⚠️ {w}</div>)}
-            {data.priceErrors.length > 0 && <div className="warn small">Prijzen niet (allemaal) opgehaald: {data.priceErrors.join(' · ')}</div>}
+            {data.priceErrors.length > 0 && <div className="warn small">{data.priceErrors.join(' · ')}: die prijzen ontbreken even.</div>}
           </div>
         )}
       </section>

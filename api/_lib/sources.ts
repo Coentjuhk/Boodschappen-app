@@ -17,7 +17,7 @@ export interface FoundProduct {
 
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 
-async function getJson(url: string, init: RequestInit = {}, timeoutMs = 8000): Promise<any> {
+async function getJson(url: string, init: RequestInit = {}, timeoutMs = 5000): Promise<any> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -117,15 +117,24 @@ export const SOURCES: Record<string, (q: string) => Promise<FoundProduct[]>> = {
   jumbo: searchJumbo,
 };
 
+// Een bron die net faalde slaan we een half uur over, zodat de rest niet op hem hoeft te wachten.
+const pausedUntil: Record<string, number> = {};
+
 /** Alle bronnen tegelijk bevragen; fouten worden verzameld i.p.v. alles te laten falen. */
 export async function searchAll(query: string, chains = Object.keys(SOURCES)) {
   const errors: Record<string, string> = {};
   const results = await Promise.all(
     chains.filter((c) => SOURCES[c]).map(async (c) => {
+      if ((pausedUntil[c] ?? 0) > Date.now()) {
+        errors[c] = 'tijdelijk niet bereikbaar';
+        return [];
+      }
       try {
         return await SOURCES[c](query);
       } catch (e: any) {
-        errors[c] = e?.message ?? String(e);
+        pausedUntil[c] = Date.now() + 30 * 60e3;
+        const msg = e?.name === 'AbortError' || /abort/i.test(e?.message ?? '') ? 'reageert niet' : (e?.message ?? String(e));
+        errors[c] = msg;
         return [];
       }
     }),

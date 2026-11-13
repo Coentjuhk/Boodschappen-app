@@ -154,9 +154,9 @@ export function useLiveData(householdId: string | undefined) {
     setRefreshing(true);
     const errs = new Set<string>();
     try {
-      for (let i = 0; i < todo.length; i += 15) {
-        const r = await api<{ results: { errors: Record<string, string> }[] }>('/api/prices', { queries: todo.slice(i, i + 15) });
-        r.results.forEach((x) => Object.entries(x.errors).forEach(([c, e]) => errs.add(`${c.toUpperCase()}: ${e}`)));
+      for (let i = 0; i < todo.length; i += 10) {
+        const r = await api<{ results: { errors: Record<string, string> }[] }>('/api/prices', { queries: todo.slice(i, i + 10) });
+        r.results.forEach((x) => Object.entries(x.errors).forEach(([c, e]) => errs.add(`${c === 'ah' ? 'AH' : c.charAt(0).toUpperCase() + c.slice(1)} ${e}`)));
       }
     } catch (e: any) {
       errs.add(e.message);

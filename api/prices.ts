@@ -2,11 +2,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { refreshQuery, requireUser } from './_lib/server.js';
 
+export const config = { maxDuration: 30 };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Alleen POST' });
     await requireUser(req);
-    const queries: string[] = Array.isArray(req.body?.queries) ? req.body.queries.slice(0, 15) : [];
+    const queries: string[] = Array.isArray(req.body?.queries) ? req.body.queries.slice(0, 10) : [];
     const results = [];
     // Een paar tegelijk, zodat we binnen de tijdslimiet blijven.
     for (let i = 0; i < queries.length; i += 4) {
