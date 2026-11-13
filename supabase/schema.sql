@@ -54,6 +54,10 @@ create table if not exists items (
 );
 create index if not exists items_household on items(household_id);
 
+-- Wachtlijst: producten die pas op de lijst komen als ze in de aanbieding zijn (of onder een richtprijs)
+alter table items add column if not exists wait_offer boolean not null default false;
+alter table items add column if not exists target_price numeric;
+
 -- Prijzen. household_id = null → automatisch opgehaald (voor iedereen),
 -- household_id gezet → zelf ingevuld (slager, bakker, ...)
 create table if not exists prices (

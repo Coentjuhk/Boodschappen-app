@@ -96,6 +96,13 @@ describe('optimizer', () => {
     const r = plan([{ id: 'g', name: 'gehakt', quantity: 500, unit: 'g', category: 'vlees' }], { g: [c('slager', 3.5)] }, stores, { mode: 'cheapest', storeIds: [], extraStorePenalty: 0 });
     expect(r.total).toBe(3.5);
   });
+  it('gaat liever naar een winkel mét prijs dan een online winkel zonder', () => {
+    const online: OptStore[] = [...stores, { id: 'web', name: 'Online', chain: 'jumbo', kinds: ['supermarkt'], online: true, delivery_fee: 0, min_order: 0 }];
+    const r = plan([{ id: 'b', name: 'bananen', quantity: 1, category: 'groente' }, { id: 'p', name: 'pindakaas', quantity: 1, category: 'voorraad' }],
+      { b: [c('ah', 1.89)], p: [c('ah', 4.29), c('web', 2.99)] }, online, { mode: 'cheapest', storeIds: [], extraStorePenalty: 1.5 });
+    expect(r.assignments.b.store_id).toBe('ah');
+    expect(r.unpriced).toBe(0);
+  });
   it('vastgezette winkel wint', () => {
     const r = plan([{ ...items[0], store_id: 'ah' }], cands, stores, { mode: 'cheapest', storeIds: [], extraStorePenalty: 0 });
     expect(r.assignments.melk.store_id).toBe('ah');

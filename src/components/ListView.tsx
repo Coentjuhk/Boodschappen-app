@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { Household, Item, Settings } from '../lib/types';
 import type { useLiveData } from '../lib/useHousehold';
-import { candidatesFor } from '../lib/candidates';
+import { candidatesFor, dealsFor } from '../lib/candidates';
 import { plan, type Assignment, type Candidate } from '../../shared/optimizer';
 import { CATEGORIES, CATEGORY_BY_ID } from '../../shared/catalog';
-import { euro, normalizeQuery } from '../../shared/text';
+import { euro, normalizeQuery, parseList } from '../../shared/text';
 import AddBar from './AddBar';
 import ItemSheet from './ItemSheet';
 
@@ -20,14 +20,30 @@ export default function ListView({ household, data, saveSettings, me }: {
   const [open, setOpen] = useState<Item | null>(null);
   const [showChecked, setShowChecked] = useState(false);
 
-  const todo = items.filter((i) => !i.checked);
+  const open_ = items.filter((i) => !i.checked);
   const done = items.filter((i) => i.checked);
 
+  const allCands = useMemo(() => {
+    const m: Record<string, Candidate[]> = {};
+    for (const i of open_) m[i.id] = candidatesFor(i, prices, enabled);
+    return m;
+  }, [open_, prices, enabled]);
+
+  // Wachtlijst: alleen naar de boodschappenlijst als er een deal is (en dan alleen bij die winkel(s))
+  const deals = useMemo(() => {
+    const m: Record<string, Candidate[]> = {};
+    for (const i of open_) if (i.wait_offer) m[i.id] = dealsFor(i, allCands[i.id] ?? []);
+    return m;
+  }, [open_, allCands]);
+  const todo = open_.filter((i) => !i.wait_offer || deals[i.id]?.length);
+  const waiting = open_.filter((i) => i.wait_offer && !deals[i.id]?.length);
   const cands = useMemo(() => {
     const m: Record<string, Candidate[]> = {};
-    for (const i of todo) m[i.id] = candidatesFor(i, prices, enabled);
+    for (const i of todo) m[i.id] = i.wait_offer ? deals[i.id] : allCands[i.id];
     return m;
-  }, [todo, prices, enabled]);
+  }, [todo, deals, allCands]);
+  const [waitText, setWaitText] = useState('');
+  const [showWaiting, setShowWaiting] = useState(true);
 
   const result = useMemo(() => plan(
     todo.map((i) => ({ id: i.id, name: i.name, quantity: Number(i.quantity), unit: i.unit, category: i.category, store_id: i.store_id })),
@@ -61,7 +77,7 @@ export default function ListView({ household, data, saveSettings, me }: {
       <header className="top">
         <h1>Boodschappen</h1>
         <button className="icon-btn" title="Prijzen verversen" disabled={data.refreshing}
-          onClick={() => data.refreshPrices([...new Set(todo.map((i) => normalizeQuery(i.name)))])}>
+          onClick={() => data.refreshPrices([...new Set(open_.map((i) => normalizeQuery(i.name)))])}>
           {data.refreshing ? <span className="spinner small" /> : '↻'}
         </button>
       </header>
@@ -97,6 +113,7 @@ export default function ListView({ household, data, saveSettings, me }: {
               {result.fees > 0 && ` · incl. ${euro(result.fees)} bezorgen`}
               {totalSavings > 0 && <span className="save"> · {euro(totalSavings)} voordeel</span>}
             </div>
+            {todo.some((i) => i.wait_offer) && <div className="deal small">🎯 {todo.filter((i) => i.wait_offer).length} van je wachtlijst nu in de aanbieding!</div>}
             {result.warnings.map((w) => <div key={w} className="warn small">⚠️ {w}</div>)}
             {data.priceErrors.length > 0 && <div className="warn small">{data.priceErrors.join(' · ')}: die prijzen ontbreken even.</div>}
           </div>
@@ -128,6 +145,42 @@ export default function ListView({ household, data, saveSettings, me }: {
         );
       })}
 
+      <section className="group waiting">
+        <h2>
+          <button className="link" onClick={() => setShowWaiting(!showWaiting)}>{showWaiting ? '▾' : '▸'} ⏳ Wachten op aanbieding ({waiting.length})</button>
+        </h2>
+        {showWaiting && (
+          <>
+            <div className="addrow wait-add">
+              <input value={waitText} placeholder="bv. scheermesjes, knakworsten…" onChange={(e) => setWaitText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { const l = parseList(waitText); if (l.length) { data.addItems(l, me, 'wachtlijst', { wait: true }); setWaitText(''); } } }} />
+              <button className="secondary" onClick={() => { const l = parseList(waitText); if (l.length) { data.addItems(l, me, 'wachtlijst', { wait: true }); setWaitText(''); } }}>Zet erop</button>
+            </div>
+            <p className="muted small">Komt automatisch op je lijst zodra het ergens in de aanbieding is (of onder je richtprijs zakt).</p>
+            {waiting.length > 0 && (
+              <ul>
+                {waiting.map((i) => {
+                  const cheapest = (allCands[i.id] ?? []).filter((c) => !c.weak || c.pinned).sort((a, b) => a.price - b.price)[0];
+                  const st = cheapest && stores.find((x) => x.id === cheapest.store_id);
+                  return (
+                    <li key={i.id} className="row" onClick={() => setOpen(i)}>
+                      <div className="thumb">{cheapest?.image_url ? <img src={cheapest.image_url} alt="" loading="lazy" /> : <span>{CATEGORY_BY_ID[i.category]?.emoji ?? '⏳'}</span>}</div>
+                      <div className="info">
+                        <div className="name">{fmtQty(i)}{i.name}</div>
+                        <div className="sub muted">
+                          {cheapest ? `nu ${euro(cheapest.price)} bij ${st?.name ?? '?'}` : 'nog geen prijs bekend'}
+                          {i.target_price != null ? ` · wacht op ≤ ${euro(Number(i.target_price))}` : ' · wacht op actie'}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
       {done.length > 0 && (
         <section className="group done">
           <h2>
@@ -151,7 +204,7 @@ export default function ListView({ household, data, saveSettings, me }: {
         <ItemSheet
           item={items.find((x) => x.id === open.id) ?? open}
           stores={stores}
-          candidates={cands[open.id] ?? []}
+          candidates={allCands[open.id] ?? []}
           assignment={result.assignments[open.id]}
           data={data}
           onClose={() => setOpen(null)}
@@ -177,7 +230,7 @@ function Row({ item, a, onToggle, onOpen }: { item: Item; a?: Assignment; onTogg
         {c?.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span>{cat?.emoji ?? '🛒'}</span>}
       </div>
       <div className="info" onClick={onOpen}>
-        <div className="name">{fmtQty(item)}{item.name}</div>
+        <div className="name">{fmtQty(item)}{item.name}{item.wait_offer && <span className="tag deal-tag">🎯 wachtlijst</span>}</div>
         <div className="sub muted">
           {c ? <>{c.title}{c.size ? ` · ${c.size}` : ''}</> : item.note ?? (item.added_by ? `door ${item.added_by}` : '')}
         </div>

@@ -167,18 +167,26 @@ export function useLiveData(householdId: string | undefined) {
     }
   }, [queries, prices, loadPrices]);
 
-  const addItems = async (lines: ParsedLine[], addedBy: string, source?: string) => {
+  // Bij openen: verouderde prijzen (ouder dan 6 uur) op de achtergrond verversen, ook voor de wachtlijst.
+  const autoRefreshed = useRef(false);
+  useEffect(() => {
+    if (autoRefreshed.current || !items.length || !prices) return;
+    const t = setTimeout(() => { autoRefreshed.current = true; refreshPrices(); }, 1500);
+    return () => clearTimeout(t);
+  }, [items.length, prices, refreshPrices]);
+
+  const addItems = async (lines: ParsedLine[], addedBy: string, source?: string, opts: { wait?: boolean } = {}) => {
     if (!householdId || !lines.length) return;
     // Staat het al op de lijst (niet afgevinkt)? Dan hoeveelheid ophogen.
     const inserts = [];
     for (const l of lines) {
-      const existing = items.find((i) => !i.checked && normalizeQuery(i.name) === normalizeQuery(l.name) && (i.unit ?? '') === (l.unit ?? ''));
+      const existing = items.find((i) => !i.checked && i.wait_offer === !!opts.wait && normalizeQuery(i.name) === normalizeQuery(l.name) && (i.unit ?? '') === (l.unit ?? ''));
       if (existing) {
         await supabase.from('items').update({ quantity: Number(existing.quantity) + l.quantity }).eq('id', existing.id);
       } else {
         inserts.push({
           household_id: householdId, name: l.name, quantity: l.quantity, unit: l.unit ?? null, note: l.note ?? null,
-          category: guessCategory(l.name), added_by: addedBy, source: source ?? null,
+          category: guessCategory(l.name), added_by: addedBy, source: source ?? null, wait_offer: !!opts.wait,
         });
       }
     }

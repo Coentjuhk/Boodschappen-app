@@ -170,3 +170,13 @@ input[type=range] { padding: 0; border: 0; background: none; accent-color: var(-
 .ingredients .check { background: none; }
 .ingredients .check.on { background: var(--brand); }
 .raw { white-space: pre-wrap; font-size: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 40dvh; overflow: auto; }
+
+.deal { color: var(--brand); font-weight: 600; margin-top: 4px; }
+.tag.deal-tag { background: var(--offer-soft); color: var(--offer); }
+.waiting { margin-top: 18px; }
+.wait-add { margin: 4px 0 6px; }
+.wait-add input { flex: 1; }
+.wait-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 12px 0 4px; }
+.wait-box .row-field { display: flex; align-items: center; margin: 6px 0; gap: 8px; }
+.wait-box .row-field input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--brand); }
+.wait-box .target { width: 90px; flex: none; padding: 6px 8px; }

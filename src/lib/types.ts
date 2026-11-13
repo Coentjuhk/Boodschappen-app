@@ -38,6 +38,8 @@ export interface Item {
   store_id: string | null;
   pinned: { chain?: string; store_id?: string; product_id: string; title: string } | null;
   checked: boolean;
+  wait_offer: boolean;
+  target_price: number | null;
   added_by: string | null;
   source: string | null;
   created_at: string;

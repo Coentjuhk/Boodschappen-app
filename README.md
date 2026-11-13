@@ -8,6 +8,7 @@ Gedeelde boodschappenlijst voor twee (of meer) telefoons, met prijzen, aanbiedin
 - **Recepttekst plakken:** kopieer een recept van een website, of tekst uit een foto (iPhone: houd je vinger op de tekst in Foto's; Android: Google Lens). De app pakt alleen de ingrediënten eruit.
 - **Per winkel gesorteerd:** binnen elke winkel op looproute (groente → brood → vlees → zuivel → …).
 - **Prijzen en aanbiedingen:** AH en Jumbo automatisch, elke ochtend ververst en direct bij het toevoegen. Met acties als 1+1 gratis, 2e halve prijs en "3 voor €5", en een bundeltip ("neem er 2: zelfde prijs").
+- **⏳ Wachten op aanbieding:** zet dingen als scheermesjes of knakworsten op de wachtlijst. Zodra ze ergens in de aanbieding zijn (of onder je richtprijs zakken), komen ze vanzelf op de boodschappenlijst.
 - **Drie modi:** *Goedkoopst* (alle winkels), *Mijn winkels* (een selectie) of *Eén winkel*.
 - **Online bestellen** telt mee, inclusief bezorgkosten en minimaal bestelbedrag.
 - **Zelf prijzen invullen** voor de slager, bakker, Primera, bouwmarkt en andere winkels zonder online prijzen. De app onthoudt ze.

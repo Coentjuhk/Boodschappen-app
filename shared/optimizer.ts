@@ -144,16 +144,18 @@ function evaluate(
       itemsTotal += pick.o.total;
       perStoreTotal.set(pick.store.id, (perStoreTotal.get(pick.store.id) ?? 0) + pick.o.total);
     } else {
-      // Geen prijs: kies een logische winkel die het verkoopt (liefst eentje waar je toch al heen gaat)
+      // Geen prijs in deze winkelcombinatie: kies een logische fysieke winkel die het verkoopt
+      // (liefst eentje waar je toch al heen gaat). Telt als "zonder prijs", zodat een combinatie
+      // die wél een prijs heeft de voorkeur krijgt.
+      const physical = (s: OptStore) => !s.online && sells(s, item.category);
       const fallback =
-        subset.find((s) => sells(s, item.category) && !s.online) ??
-        pool.find((s) => used.has(s.id) && sells(s, item.category)) ??
-        pool.find((s) => sells(s, item.category) && !s.online) ??
+        subset.find(physical) ??
+        pool.find((s) => used.has(s.id) && physical(s)) ??
+        pool.find(physical) ??
         (opt.mode !== 'cheapest' ? pool[0] : undefined);
       assignments[item.id] = { item_id: item.id, store_id: fallback?.id ?? null };
       if (fallback) used.add(fallback.id);
-      const physicalOk = fallback && subset.some((s) => s.id === fallback.id);
-      if (!physicalOk) unpriced++;
+      unpriced++;
     }
   }
 

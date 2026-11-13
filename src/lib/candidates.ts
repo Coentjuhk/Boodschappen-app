@@ -63,3 +63,14 @@ export function stem(w: string) {
   const s = collapse(w.replace(/(eren|en|s)$/, ''));
   return s.length >= 3 || w.length <= 3 ? s : collapse(w);
 }
+
+/**
+ * Wachtlijst: is er nu een goede deal voor dit product?
+ * Ja als een (goed passend of gekozen) product in de aanbieding is, of onder de richtprijs per stuk zit.
+ */
+export function dealsFor(item: Item, cands: Candidate[]): Candidate[] {
+  const target = item.target_price == null ? null : Number(item.target_price);
+  const pinned = cands.filter((c) => c.pinned);
+  const pool = pinned.length ? pinned : cands.filter((c) => !c.weak);
+  return pool.filter((c) => (target != null ? Number(c.price) <= target : !!c.mechanic));
+}

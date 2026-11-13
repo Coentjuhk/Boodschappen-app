@@ -66,6 +66,20 @@ export default function ItemSheet({ item, stores, candidates, assignment, data, 
             <input defaultValue={item.note ?? ''} placeholder="bv. merk, smaak, voor zaterdag" onBlur={(e) => up({ note: e.target.value.trim() || null })} />
           </label>
         </div>
+        <div className="wait-box">
+          <label className="row-field">
+            <input type="checkbox" checked={item.wait_offer} onChange={(e) => up({ wait_offer: e.target.checked })} />
+            <span>⏳ Wachten op aanbieding</span>
+          </label>
+          {item.wait_offer && (
+            <label className="row-field small">
+              <span>Of zodra het kost minder dan €</span>
+              <input className="target" inputMode="decimal" defaultValue={item.target_price == null ? '' : String(item.target_price).replace('.', ',')} placeholder="optioneel"
+                onBlur={(e) => { const n = Number(e.target.value.replace(',', '.')); up({ target_price: e.target.value.trim() && n > 0 ? n : null }); }} />
+            </label>
+          )}
+          {item.wait_offer && <p className="muted small">{item.target_price != null ? 'Komt op de lijst als de prijs onder je richtprijs komt.' : 'Komt op de lijst zodra er een actie is. Tip: kies hieronder het juiste product (📌) zodat de app de juiste actie herkent.'}</p>}
+        </div>
         {item.added_by && <p className="muted small">Toegevoegd door {item.added_by}{item.source ? ` · ${item.source}` : ''}</p>}
 
         <h3>Prijzen {item.pinned && <button className="link small" onClick={() => up({ pinned: null })}>vast product loslaten</button>}</h3>
