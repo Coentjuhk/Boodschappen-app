@@ -69,6 +69,9 @@ export default function ItemSheet({ item, stores, candidates, assignment, data, 
         {item.added_by && <p className="muted small">Toegevoegd door {item.added_by}{item.source ? ` · ${item.source}` : ''}</p>}
 
         <h3>Prijzen {item.pinned && <button className="link small" onClick={() => up({ pinned: null })}>vast product loslaten</button>}</h3>
+        {candidates.some((c) => c.weak) && !item.pinned && (
+          <p className="warn small">Niet zeker welk product je bedoelt. Tik het juiste aan (📌), dan rekent de app ermee.</p>
+        )}
         {storeOrder.length === 0 && <p className="muted small">Nog geen prijzen gevonden. Probeer ↻ bovenaan, maak de naam specifieker (bv. "halfvolle melk"), of vul hieronder zelf een prijs in.</p>}
         {storeOrder.map((sid) => {
           const s = stores.find((x) => x.id === sid);

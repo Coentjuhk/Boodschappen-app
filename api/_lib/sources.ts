@@ -77,34 +77,74 @@ export async function searchAH(query: string, size = 8): Promise<FoundProduct[]>
 }
 
 // ---------------- Jumbo ----------------
-export async function searchJumbo(query: string, size = 8): Promise<FoundProduct[]> {
-  const u = new URL('https://mobileapi.jumbo.com/v17/search');
-  u.searchParams.set('q', query);
-  u.searchParams.set('offset', '0');
-  u.searchParams.set('limit', String(size));
-  const j = await getJson(u.toString(), { headers: { 'User-Agent': UA } });
-  const data: any[] = j.products?.data ?? [];
-  return data
-    .map((p): FoundProduct | null => {
-      const cents = p.prices?.promotionalPrice?.amount ?? p.prices?.price?.amount;
-      const baseCents = p.prices?.price?.amount;
-      if (cents == null) return null;
-      const promo = p.promotion ?? p.promotions?.[0];
-      return {
-        chain: 'jumbo',
-        product_id: String(p.id),
-        title: p.title,
-        size: p.quantity ?? null,
-        price: cents / 100,
-        base_price: baseCents != null ? baseCents / 100 : cents / 100,
-        mechanic: promo ? (promo.tags?.[0]?.text ?? promo.name ?? promo.summary ?? 'Aanbieding') : null,
-        offer_until: promo?.toDate ? new Date(promo.toDate).toISOString().slice(0, 10) : null,
-        image_url: p.imageInfo?.primaryView?.[0]?.url ?? null,
-        url: `https://www.jumbo.com/producten/-${p.id}`,
-      };
-    })
-    .filter((x): x is FoundProduct => !!x)
-    .map((x, i) => ({ ...x, rank: i }));
+// De oude Jumbo-app-koppeling is afgesloten; we lezen de openbare zoekpagina van jumbo.com.
+const MONTHS: Record<string, number> = { jan: 0, feb: 1, mrt: 2, apr: 3, mei: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, nov: 10, dec: 11 };
+
+function decode(s: string) {
+  return s
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "wo 11 t/m di 17 nov" → "2026-11-17" */
+export function jumboUntil(text: string, now = new Date()): string | null {
+  const m = text.match(/t\/m\s+(?:[a-z]{2}\s+)?(\d{1,2})\s+([a-z]{3})/i);
+  if (!m || MONTHS[m[2].toLowerCase()] == null) return null;
+  const month = MONTHS[m[2].toLowerCase()];
+  const year = month < now.getMonth() - 6 ? now.getFullYear() + 1 : now.getFullYear();
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(Number(m[1])).padStart(2, '0')}`;
+}
+
+export function parseJumboHtml(html: string): FoundProduct[] {
+  const cards = html.split(/(?=<article)/).filter((c) => c.includes('data-testid="product-price"'));
+  const out: FoundProduct[] = [];
+  for (const card of cards) {
+    const link = card.match(/href="\/producten\/([^"]*?)-([0-9A-Z]+)"/);
+    const heading = card.match(/data-testid="jum-heading"[^>]*>([\s\S]*?)<\/(?:h\d|div|span)>/);
+    const title = heading ? decode(heading[1]) : null;
+    const priceM = decode(card.match(/data-testid="product-price"[\s\S]{0,1500}/)?.[0] ?? '').match(/Prijs:\s*€\s*(\d+),(\d{2})/);
+    if (!link || !title || !priceM) continue;
+    const price = Number(`${priceM[1]}.${priceM[2]}`);
+    const subtitle = card.match(/data-testid="jum-card-subtitle"[^>]*>([\s\S]*?)<\//);
+    const tags = [...card.matchAll(/data-testid="jum-tag"[^>]*>([\s\S]*?)<\/(?:span|div)>/g)].map((m) => decode(m[1])).filter(Boolean);
+    const sponsored = /gesponsord/i.test(card);
+    const dateTag = tags.find((t) => /t\/m/i.test(t));
+    // Alleen echte acties ("2 voor 3,99", "1+1 gratis", "25% korting"), geen labels als "Goedkoopje" of "Nieuw"
+    const mech = tags.filter((t) => !/gesponsord|t\/m|bezorgkorting/i.test(t) && /\d|gratis|korting|halve|voor/i.test(t)).join(' ').trim() || null;
+    const img = card.match(/<img[^>]+src="(https:\/\/[^"]+)"/);
+    out.push({
+      chain: 'jumbo',
+      product_id: link[2],
+      title,
+      size: subtitle ? decode(subtitle[1]) : null,
+      price,
+      base_price: price,
+      mechanic: mech,
+      offer_until: mech && dateTag ? jumboUntil(dateTag) : null,
+      image_url: img?.[1] ?? null,
+      url: `https://www.jumbo.com/producten/${link[1]}-${link[2]}`,
+      rank: sponsored ? 100 + out.length : out.length,
+    });
+  }
+  return out.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).slice(0, 8).map((x, i) => ({ ...x, rank: i }));
+}
+
+export async function searchJumbo(query: string): Promise<FoundProduct[]> {
+  const u = new URL('https://www.jumbo.com/producten/');
+  u.searchParams.set('searchType', 'keyword');
+  u.searchParams.set('searchTerms', query);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 7000);
+  try {
+    const r = await fetch(u, { signal: ctrl.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'nl-NL,nl;q=0.9', Accept: 'text/html' } });
+    if (!r.ok) throw new Error(`${r.status} bij jumbo.com`);
+    return parseJumboHtml(await r.text());
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 function num(v: unknown): number | null {

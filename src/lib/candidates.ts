@@ -9,7 +9,7 @@ import type { Item, PriceRow, Store } from './types';
  */
 export function candidatesFor(item: Item, prices: PriceRow[], stores: Store[]): Candidate[] {
   const q = normalizeQuery(item.name);
-  const words = q.split(' ').filter((w) => w.length > 1);
+  const words = q.split(' ').filter((w) => w.length > 1).map(stem);
   const rows = prices.filter((p) => p.query === q);
   const out: Candidate[] = [];
 
@@ -19,15 +19,18 @@ export function candidatesFor(item: Item, prices: PriceRow[], stores: Store[]): 
 
   for (const [chain, list] of byChain) {
     const matching = list.filter((p) => {
-      const t = normalizeQuery(p.title);
+      const t = collapse(normalizeQuery(p.title));
       return words.every((w) => t.includes(w));
     });
-    const pool = (matching.length ? matching : list).sort((a, b) => a.rank - b.rank).slice(0, matching.length ? 6 : 3);
+    // Geen product met de juiste naam? Dan tonen we de bovenste resultaten wel om uit te kiezen,
+    // maar rekenen we er niet automatisch mee (voorkomt "kattenbakzakken" als goedkoopste kattenvoer).
+    const weak = matching.length === 0;
+    const pool = (weak ? list : matching).sort((a, b) => a.rank - b.rank).slice(0, weak ? 4 : 6);
     // Een vastgepind product altijd meenemen
     const pinned = item.pinned?.chain === chain ? list.find((p) => p.product_id === item.pinned!.product_id) : undefined;
     if (pinned && !pool.includes(pinned)) pool.push(pinned);
     for (const s of stores.filter((s) => s.enabled && s.chain === chain)) {
-      for (const p of pool) out.push(toCand(p, s.id, !!pinned && p === pinned));
+      for (const p of pool) out.push({ ...toCand(p, s.id, !!pinned && p === pinned), weak: weak && p !== pinned });
     }
   }
   for (const p of rows.filter((p) => p.household_id && p.store_id)) {
@@ -50,4 +53,13 @@ function toCand(p: PriceRow, storeId: string, pinned: boolean): Candidate {
     offer_until: p.offer_until,
     pinned,
   };
+}
+
+/** Dubbele letters samenvoegen ("banaan" → "banan"), zodat enkelvoud/meervoud elkaar vinden. */
+const collapse = (s: string) => s.replace(/(.)\1+/g, '$1');
+
+/** Eenvoudige stam: "bananen" vindt "banaan", "kaas" blijft "kas". */
+export function stem(w: string) {
+  const s = collapse(w.replace(/(eren|en|s)$/, ''));
+  return s.length >= 3 || w.length <= 3 ? s : collapse(w);
 }

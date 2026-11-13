@@ -3,6 +3,7 @@ import { parseLine, parseList, normalizeQuery, extractIngredients, detectServing
 import { offerTotal, evaluateOffer } from '../shared/offers';
 import { guessCategory } from '../shared/catalog';
 import { plan, type Candidate, type OptStore } from '../shared/optimizer';
+import { stem } from '../src/lib/candidates';
 
 describe('lijst plakken', () => {
   it('begrijpt hoeveelheden', () => {
@@ -124,5 +125,14 @@ Verwarm de oven voor op 200 graden. Bak het gehakt rul.`;
     expect(r.find((x) => x.name === 'Knoflook')).toMatchObject({ quantity: 2, unit: 'teen' });
     expect(r.find((x) => x.name === 'Zout')?.pantry).toBe(true);
     expect(r.find((x) => x.name === 'Olijfolie')).toMatchObject({ pantry: true, quantity: 1, unit: undefined });
+  });
+});
+
+describe('woordstam', () => {
+  it('vindt enkelvoud bij meervoud', () => {
+    expect('ah banan'.includes(stem('bananen'))).toBe(true);
+    expect(stem('kaas')).toBe('kas');
+    expect('kattenvoer'.replace(/(.)\1+/g, '$1').includes(stem('kaas'))).toBe(false);
+    expect(stem('eieren')).toBe('eieren'); // te kort om te strippen; titels bevatten meestal 'eieren'
   });
 });

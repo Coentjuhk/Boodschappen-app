@@ -37,6 +37,8 @@ export interface Candidate extends PricedProduct {
   image_url?: string | null;
   offer_until?: string | null;
   pinned?: boolean;
+  /** Twijfelachtige match (naam komt niet overeen): alleen tonen om te kiezen, niet automatisch rekenen. */
+  weak?: boolean;
 }
 
 export interface Assignment {
@@ -73,7 +75,7 @@ function sells(store: OptStore, category: string) {
 function bestPerStore(item: OptItem, cands: Candidate[]) {
   const out = new Map<string, { cand: Candidate; total: number; perUnit: number; tip?: string }>();
   const pinned = cands.filter((c) => c.pinned);
-  for (const c of pinned.length ? pinned : cands) {
+  for (const c of pinned.length ? pinned : cands.filter((c) => !c.weak)) {
     const ev = evaluateOffer(c, packCount(item));
     const cur = out.get(c.store_id);
     if (!cur || ev.total < cur.total) out.set(c.store_id, { cand: c, total: ev.total, perUnit: ev.perUnit, tip: ev.bundleTip?.text });
