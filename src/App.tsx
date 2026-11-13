@@ -15,12 +15,13 @@ export default function App() {
     return (
       <div className="center-page">
         <h1>Bijna klaar</h1>
-        <p>De app is nog niet gekoppeld aan de database. Zet <code>VITE_SUPABASE_URL</code> en <code>VITE_SUPABASE_ANON_KEY</code> in Vercel (zie README).</p>
+        <p>De app is nog niet gekoppeld aan de database. Koppel Supabase aan het project in Vercel (Integrations → Supabase) en deploy opnieuw. Zie de README.</p>
       </div>
     );
   }
   if (error) return <div className="center-page"><h1>Inloggen mislukt</h1><p>{error}</p></div>;
   if (!userId || hh.loading) return <div className="center-page"><div className="spinner" /></div>;
+  if (hh.setupError) return <div className="center-page"><h1>Bijna klaar</h1><p>{hh.setupError}</p></div>;
   if (!hh.household) return <Onboarding onCreate={hh.create} onJoin={hh.join} />;
 
   return (

@@ -15,42 +15,46 @@ Werkt op iPhone en Android: je zet de app op je beginscherm, zonder App Store.
 
 ---
 
-## Installeren (eenmalig, ±20 minuten)
+## Installeren (eenmalig, ±10 minuten)
 
-Je hebt drie gratis accounts nodig. Alleen de receptfoto's kosten een klein beetje geld.
+De database wordt automatisch klaargezet. Jij hoeft alleen twee accounts aan te maken en een paar keer te klikken.
 
-### 1. Database: Supabase (gratis)
-1. Maak een account op [supabase.com](https://supabase.com) en klik op **New project** (regio: *West EU*).
-2. Ga naar **SQL Editor** → **New query**, plak de inhoud van [`supabase/schema.sql`](supabase/schema.sql) en klik op **Run**.
-3. Ga naar **Authentication** → **Sign In / Providers** en zet **Allow anonymous sign-ins** aan. Zo hoeven jullie geen account aan te maken: de huishoudcode is genoeg.
-4. Ga naar **Project Settings** → **API** en noteer:
-   - de *Project URL*
-   - de *anon / publishable key*
-   - de *service_role / secret key* (geheim houden!)
+### Stap 1: AI-sleutel voor receptfoto's (Anthropic)
+1. Ga naar [console.anthropic.com](https://console.anthropic.com) en maak een account aan.
+2. Kies **Billing** en zet er €5 tegoed op. Eén receptfoto kost een paar cent.
+3. Kies **API Keys** → **Create Key** en kopieer de sleutel (begint met `sk-ant-`).
 
-### 2. AI voor receptfoto's: Anthropic
-1. Maak een account op [console.anthropic.com](https://console.anthropic.com), zet er €5 tegoed op en maak een **API key** aan.
-2. Eén receptfoto kost een paar cent.
+### Stap 2: App online zetten (Vercel, gratis)
+1. Ga naar [vercel.com](https://vercel.com) → **Sign Up** → **Continue with GitHub**.
+2. Kies **Add New… → Project** → **Boodschappen-app** → **Import**.
+3. Open **Environment Variables** en voeg toe: naam `ANTHROPIC_API_KEY`, waarde: de sleutel uit stap 1.
+4. Klik op **Deploy**. Je krijgt een adres zoals `boodschappen-app-xxx.vercel.app`. De app zegt dan nog "Bijna klaar"; dat klopt.
 
-### 3. Hosting: Vercel (gratis)
-1. Log in op [vercel.com](https://vercel.com) met GitHub en kies **Add New → Project** → deze repository.
-2. Vul onder **Environment Variables** in:
+### Stap 3: Database koppelen (Supabase via Vercel, gratis)
+1. Open in Vercel je project → tab **Storage** → **Create Database** → **Supabase** → gratis plan, regio *Frankfurt* of *Londen* → **Create** en daarna **Connect**.
+   Vercel vult nu zelf alle databasegegevens in.
+2. Ga naar tab **Deployments** → ⋯ bij de bovenste → **Redeploy**.
+   Tijdens het opnieuw bouwen zet de app zelf de database klaar.
 
-   | Naam | Waarde |
-   |---|---|
-   | `VITE_SUPABASE_URL` | Project URL uit stap 1 |
-   | `VITE_SUPABASE_ANON_KEY` | anon key uit stap 1 |
-   | `SUPABASE_SERVICE_ROLE_KEY` | service_role key uit stap 1 |
-   | `ANTHROPIC_API_KEY` | key uit stap 2 |
-   | `CRON_SECRET` | een willekeurig lang wachtwoord |
+De prijzen worden elke ochtend ververst, en ook meteen als je iets toevoegt of op ↻ drukt.
 
-3. Klik op **Deploy**. Je krijgt een adres zoals `boodschappen-xxx.vercel.app`.
-4. De prijzen worden elke ochtend om 06:00 ververst (`vercel.json`). Daarnaast ook meteen wanneer je iets toevoegt, en als je op ↻ drukt.
+### Stap 4: Op jullie telefoons
+- **iPhone:** open het adres in Safari → *Nieuwe gedeelde lijst starten* → deelknop → **Zet op beginscherm**.
+- In de app: **Winkels & delen** → **Deel uitnodiging**, en stuur de link via WhatsApp naar je partner.
+- **Android:** open de link in Chrome → *Meedoen met de lijst* → menu ⋮ → **App installeren**.
 
-### 4. Op jullie telefoons
-- **iPhone:** open het adres in Safari, kies *Nieuwe gedeelde lijst starten*, en dan deelknop → **Zet op beginscherm**.
-- In de app: **Winkels & delen** → **Deel uitnodiging**, en stuur de link naar je partner.
-- **Android:** open de link in Chrome, kies *Meedoen*, en dan menu ⋮ → **App installeren**.
+<details>
+<summary>Liever zelf een Supabase-project aanmaken?</summary>
+
+Maak een project op supabase.com en plak `supabase/schema.sql` in de SQL Editor (**Run**). Zet daarna in Vercel deze variabelen:
+
+| Naam | Waarde |
+|---|---|
+| `VITE_SUPABASE_URL` | Project URL |
+| `VITE_SUPABASE_ANON_KEY` | anon/publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role/secret key |
+
+</details>
 
 ---
 
@@ -60,7 +64,7 @@ Je hebt drie gratis accounts nodig. Alleen de receptfoto's kosten een klein beet
 |---|---|
 | Albert Heijn ('t Plateau, De Akkers, bezorgen) | ✅ automatisch, incl. bonus |
 | Jumbo (bezorgen) | ✅ automatisch, incl. aanbiedingen |
-| Lidl, Aldi, Plus, Kruidvat, bouwmarkt, Dierenplezier, Primera | ✍️ zelf invullen per product (wordt onthouden); automatische koppeling volgt waar mogelijk |
+| Dirk (De Bas), Lidl, Aldi, Plus, Kruidvat, bouwmarkt, Dierenplezier, Primera | ✍️ zelf invullen per product (wordt onthouden); automatische koppeling volgt waar mogelijk |
 | Slager, bakker | ✍️ zelf invullen |
 
 De AH- en Jumbo-koppelingen zijn **niet officieel**: het zijn dezelfde koppelingen die hun eigen apps gebruiken. Als een winkel iets verandert, kan zo'n bron tijdelijk stoppen. De app laat dan een melding zien en werkt verder met de laatst bekende prijzen.

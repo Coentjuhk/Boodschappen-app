@@ -82,6 +82,7 @@ export const DEFAULT_STORES: StoreSeed[] = [
   { name: "Gall & Gall 't Plateau", chain: 'gallgall', kinds: ['slijterij'], location: "'t Plateau 19" },
   { name: 'Albert Heijn De Akkers', chain: 'ah', kinds: ['supermarkt', 'drogist', 'dierenwinkel', 'slijterij'], location: 'Winkelcentrum De Akkers', enabled: false },
   { name: 'Plus De Akkers', chain: 'plus', kinds: ['supermarkt', 'drogist', 'dierenwinkel'], location: 'Winterakker' },
+  { name: 'Dirk De Bas (centrum)', chain: 'dirk', kinds: ['supermarkt', 'drogist', 'dierenwinkel', 'slijterij'], location: 'Winkelcentrum De Bas, centrum' },
   { name: 'Kruidvat', chain: 'kruidvat', kinds: ['drogist'], location: 'Centrum' },
   { name: 'Slager', kinds: ['slager'], location: 'zelf invullen' },
   { name: 'Bakker', kinds: ['bakker'], location: 'zelf invullen' },

@@ -5,6 +5,7 @@ import { DEFAULT_STORES, guessCategory } from '../../shared/catalog';
 import { normalizeQuery, type ParsedLine } from '../../shared/text';
 
 const NAME_KEY = 'bs.name';
+const DEVICE_KEY = 'bs.device';
 export const getMyName = () => { try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; } };
 export const setMyName = (n: string) => { try { localStorage.setItem(NAME_KEY, n); } catch { /* */ } };
 
@@ -16,9 +17,28 @@ export function useSession() {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) return setUserId(data.session.user.id);
-      const r = await supabase.auth.signInAnonymously();
-      if (r.error) setError(r.error.message + ' — staat "Anonymous sign-ins" aan in Supabase?');
-      else setUserId(r.data.user!.id);
+      // 1) Eerder voor deze telefoon aangemaakt account?
+      let creds: { email: string; password: string } | null = null;
+      try { creds = JSON.parse(localStorage.getItem(DEVICE_KEY) ?? 'null'); } catch { /* */ }
+      if (creds) {
+        const r = await supabase.auth.signInWithPassword(creds);
+        if (!r.error) return setUserId(r.data.user!.id);
+      }
+      // 2) Anoniem inloggen (als dat aan staat in Supabase)
+      const anon = await supabase.auth.signInAnonymously();
+      if (!anon.error) return setUserId(anon.data.user!.id);
+      // 3) Anders: de server maakt een account voor deze telefoon
+      try {
+        const r = await fetch('/api/device', { method: 'POST' });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? 'Fout ' + r.status);
+        try { localStorage.setItem(DEVICE_KEY, JSON.stringify(j)); } catch { /* */ }
+        const s = await supabase.auth.signInWithPassword(j);
+        if (s.error) throw s.error;
+        setUserId(s.data.user!.id);
+      } catch (e: any) {
+        setError('Inloggen lukt niet: ' + (e.message ?? e));
+      }
     })();
   }, []);
   return { userId, error };
@@ -27,10 +47,14 @@ export function useSession() {
 export function useHousehold(userId: string | null) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [loading, setLoading] = useState(true);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const { data } = await supabase.from('members').select('households(*)').eq('user_id', userId).limit(1).maybeSingle();
+    const { data, error } = await supabase.from('members').select('households(*)').eq('user_id', userId).limit(1).maybeSingle();
+    if (error && /does not exist|schema cache/i.test(error.message)) {
+      setSetupError('De database is nog niet klaargezet. Plak supabase/schema.sql in Supabase (SQL Editor → Run) en herlaad.');
+    }
     setHousehold(((data as any)?.households as Household) ?? null);
     setLoading(false);
   }, [userId]);
@@ -59,7 +83,7 @@ export function useHousehold(userId: string | null) {
     setHousehold({ ...household, settings });
     await supabase.from('households').update({ settings }).eq('id', household.id);
   };
-  return { household, loading, create, join, saveSettings, reload: load };
+  return { household, loading, setupError, create, join, saveSettings, reload: load };
 }
 
 /** Lijst, winkels en prijzen — live gesynchroniseerd tussen jullie telefoons. */

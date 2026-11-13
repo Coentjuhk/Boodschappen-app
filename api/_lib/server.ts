@@ -7,8 +7,8 @@ let admin: SupabaseClient | null = null;
 
 export function supabaseAdmin(): SupabaseClient {
   if (admin) return admin;
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) throw new Error('SUPABASE_URL en SUPABASE_SERVICE_ROLE_KEY ontbreken in de Vercel-instellingen');
   admin = createClient(url, key, { auth: { persistSession: false } });
   return admin;
