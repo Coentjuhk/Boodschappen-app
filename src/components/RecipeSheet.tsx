@@ -6,16 +6,7 @@ import { detectServings, extractIngredients, type ParsedLine } from '../../share
 interface Ingredient { name: string; quantity: number; unit: string; pantry: boolean }
 interface Recipe { title: string; servings: number; ingredients: Ingredient[]; raw?: string }
 
-/** Foto verkleinen en als canvas teruggeven. */
-async function toCanvas(file: File, max: number): Promise<HTMLCanvasElement> {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * scale);
-  c.height = Math.round(bmp.height * scale);
-  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
-  return c;
-}
+import { readText, toCanvas } from '../lib/ocr';
 
 /** Optioneel: AI (alleen als er een API-sleutel is ingesteld). Geeft null als dat niet zo is. */
 async function readWithAI(file: File): Promise<Recipe | null> {
@@ -31,20 +22,10 @@ async function readWithAI(file: File): Promise<Recipe | null> {
 
 /** Gratis: tekst lezen op de telefoon zelf (Tesseract, Nederlands). */
 async function readOnDevice(file: File, onProgress: (p: number) => void): Promise<Recipe> {
-  const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker('nld', 1, {
-    logger: (m: { status: string; progress: number }) => { if (m.status === 'recognizing text') onProgress(m.progress); },
-  });
-  try {
-    const canvas = await toCanvas(file, 2400);
-    const { data } = await worker.recognize(canvas);
-    const text = data.text ?? '';
-    const ingredients = extractIngredients(text).map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? '', pantry: i.pantry }));
-    const firstLine = text.split('\n').map((l) => l.trim()).find((l) => l.length > 3 && /[a-z]/i.test(l)) ?? 'Recept';
-    return { title: firstLine.slice(0, 40), servings: detectServings(text) ?? 4, ingredients, raw: text };
-  } finally {
-    await worker.terminate();
-  }
+  const [text] = await readText([file], (_, p) => onProgress(p));
+  const ingredients = extractIngredients(text).map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? '', pantry: i.pantry }));
+  const firstLine = text.split('\n').map((l) => l.trim()).find((l) => l.length > 3 && /[a-z]/i.test(l)) ?? 'Recept';
+  return { title: firstLine.slice(0, 40), servings: detectServings(text) ?? 4, ingredients, raw: text };
 }
 
 export default function RecipeSheet({ file, onClose, onAdd }: {

@@ -76,7 +76,9 @@ code { font-size: 14px; }
 
 .app { max-width: 640px; margin: 0 auto; padding: env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom)); }
 main { padding: 0 16px; }
-.top { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 12px; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 16px 0 12px; }
+.top h1 { flex: 1; }
+label.icon-btn { cursor: pointer; }
 
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
 .tabbar button { flex: 1; padding: 8px 0 10px; display: flex; flex-direction: column; align-items: center; font-size: 20px; color: var(--muted); }
@@ -180,3 +182,9 @@ input[type=range] { padding: 0; border: 0; background: none; accent-color: var(-
 .wait-box .row-field { display: flex; align-items: center; margin: 6px 0; gap: 8px; }
 .wait-box .row-field input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--brand); }
 .wait-box .target { width: 90px; flex: none; padding: 6px 8px; }
+
+.bon { margin: 12px 0 16px; }
+.bon-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.bon .info { flex: 1; min-width: 0; }
+.bon .info .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bon-price { width: 72px; flex: none; text-align: right; padding: 6px 8px; }

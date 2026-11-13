@@ -7,6 +7,7 @@ import { CATEGORIES, CATEGORY_BY_ID } from '../../shared/catalog';
 import { euro, normalizeQuery, parseList } from '../../shared/text';
 import AddBar from './AddBar';
 import ItemSheet from './ItemSheet';
+import ReceiptSheet from './ReceiptSheet';
 
 type Data = ReturnType<typeof useLiveData>;
 
@@ -19,6 +20,7 @@ export default function ListView({ household, data, saveSettings, me }: {
   const enabled = stores.filter((x) => x.enabled);
   const [open, setOpen] = useState<Item | null>(null);
   const [showChecked, setShowChecked] = useState(false);
+  const [receipts, setReceipts] = useState<File[] | null>(null);
 
   const open_ = items.filter((i) => !i.checked);
   const done = items.filter((i) => i.checked);
@@ -76,6 +78,10 @@ export default function ListView({ household, data, saveSettings, me }: {
     <div className="list-view">
       <header className="top">
         <h1>Boodschappen</h1>
+        <label className="icon-btn" title="Kassabon scannen (prijzen leren)">
+          🧾
+          <input type="file" accept="image/*" multiple hidden onChange={(e) => { const f = [...(e.target.files ?? [])]; if (f.length) setReceipts(f); e.target.value = ''; }} />
+        </label>
         <button className="icon-btn" title="Prijzen verversen" disabled={data.refreshing}
           onClick={() => data.refreshPrices([...new Set(open_.map((i) => normalizeQuery(i.name)))])}>
           {data.refreshing ? <span className="spinner small" /> : '↻'}
@@ -198,6 +204,10 @@ export default function ListView({ household, data, saveSettings, me }: {
             </ul>
           )}
         </section>
+      )}
+
+      {receipts && (
+        <ReceiptSheet files={receipts} stores={stores} items={items} onSave={data.saveReceiptPrices} onClose={() => setReceipts(null)} />
       )}
 
       {open && (

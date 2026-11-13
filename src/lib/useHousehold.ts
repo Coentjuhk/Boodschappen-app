@@ -221,6 +221,20 @@ export function useLiveData(householdId: string | undefined) {
     loadPrices(queries);
   };
 
+  /** Prijzen van een kassabon opslaan als eigen prijzen voor die winkel. */
+  const saveReceiptPrices = async (storeId: string, entries: { name: string; price: number; title: string }[]) => {
+    const rows = new Map(entries.map((e) => [normalizeQuery(e.name), e]));
+    const qs = [...rows.keys()].filter(Boolean);
+    if (!qs.length) return;
+    await supabase.from('prices').delete().eq('household_id', householdId!).eq('store_id', storeId).in('query', qs);
+    const { error } = await supabase.from('prices').insert(qs.map((q) => {
+      const e = rows.get(q)!;
+      return { household_id: householdId, store_id: storeId, query: q, product_id: 'handmatig', title: e.title, price: e.price, base_price: e.price };
+    }));
+    if (error) throw error;
+    await loadPrices(queries);
+  };
+
   const saveStore = async (s: Partial<Store> & { id?: string }) => {
     if (s.id) await supabase.from('stores').update(s).eq('id', s.id);
     else await supabase.from('stores').insert({ ...s, household_id: householdId, sort: stores.length });
@@ -230,6 +244,6 @@ export function useLiveData(householdId: string | undefined) {
 
   return {
     items, stores, prices, refreshing, priceErrors,
-    addItems, updateItem, deleteItem, clearChecked, refreshPrices, setManualPrice, saveStore, deleteStore,
+    addItems, updateItem, deleteItem, clearChecked, refreshPrices, setManualPrice, saveReceiptPrices, saveStore, deleteStore,
   };
 }
