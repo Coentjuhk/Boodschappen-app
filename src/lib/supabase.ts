@@ -20,6 +20,6 @@ export async function api<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error ?? `Fout ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(j.error ?? `Fout ${r.status}`), { status: r.status });
   return j as T;
 }

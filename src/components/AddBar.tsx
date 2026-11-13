@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { parseList, type ParsedLine } from '../../shared/text';
+import { extractIngredients, looksLikeRecipe, parseList, type ParsedLine } from '../../shared/text';
 import RecipeSheet from './RecipeSheet';
 
 /** Eén regel typen, of een hele lijst plakken (elke regel wordt een product). Plus: foto van een recept. */
@@ -7,12 +7,14 @@ export default function AddBar({ onAdd }: { onAdd: (lines: ParsedLine[], source?
   const [text, setText] = useState('');
   const [photo, setPhoto] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const lines = parseList(text);
+  // Geplakte recepttekst (bv. via Live Text gekopieerd)? Dan alleen de ingrediënten, zonder zout/peper/olie.
+  const isRecipe = looksLikeRecipe(text);
+  const lines: ParsedLine[] = isRecipe ? extractIngredients(text).filter((i) => !i.pantry) : parseList(text);
 
   const submit = async () => {
     if (!lines.length) return;
     setText('');
-    await onAdd(lines, lines.length > 1 ? 'geplakt' : undefined);
+    await onAdd(lines, isRecipe ? 'recept (geplakt)' : lines.length > 1 ? 'geplakt' : undefined);
   };
 
   return (

@@ -30,12 +30,14 @@ const SYSTEM = `Je leest foto's van recepten (kookboek, tijdschrift, handgeschre
 - Laat bereidingsstappen weg; alleen wat je moet kopen.
 - Staat er geen recept op de foto, zet is_recipe op false en geef een lege lijst.`;
 
-const client = new Anthropic();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Alleen POST' });
+    // Zonder API-sleutel leest de app de foto gratis op de telefoon zelf.
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(501).json({ error: 'Geen AI ingesteld' });
     await requireUser(req);
+    const client = new Anthropic();
     const image: string | undefined = req.body?.image;
     const mediaType = (req.body?.mediaType ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
     if (!image) return res.status(400).json({ error: 'Geen foto ontvangen' });

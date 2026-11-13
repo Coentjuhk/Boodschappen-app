@@ -4,7 +4,8 @@ Gedeelde boodschappenlijst voor twee (of meer) telefoons, met prijzen, aanbiedin
 
 - **Altijd up-to-date:** wijzigingen staan binnen een seconde op de andere telefoon.
 - **Lijstjes droppen:** typ één product, of plak een hele lijst (uit WhatsApp, Notities of Listonic). Elke regel wordt een product, en "2x melk" of "500 g gehakt" wordt herkend.
-- **Receptfoto → lijst:** maak een foto van een recept. Je ziet de ingrediënten, kiest het aantal personen en vinkt aan wat je al hebt.
+- **Receptfoto → lijst:** maak een foto van een recept. De telefoon leest de tekst zelf (gratis). Je ziet de ingrediënten, kiest het aantal personen en vinkt aan wat je al hebt.
+- **Recepttekst plakken:** kopieer een recept van een website, of tekst uit een foto (iPhone: houd je vinger op de tekst in Foto's; Android: Google Lens). De app pakt alleen de ingrediënten eruit.
 - **Per winkel gesorteerd:** binnen elke winkel op looproute (groente → brood → vlees → zuivel → …).
 - **Prijzen en aanbiedingen:** AH en Jumbo automatisch, elke ochtend ververst en direct bij het toevoegen. Met acties als 1+1 gratis, 2e halve prijs en "3 voor €5", en een bundeltip ("neem er 2: zelfde prijs").
 - **Drie modi:** *Goedkoopst* (alle winkels), *Mijn winkels* (een selectie) of *Eén winkel*.
@@ -17,20 +18,14 @@ Werkt op iPhone en Android: je zet de app op je beginscherm, zonder App Store.
 
 ## Installeren (eenmalig, ±10 minuten)
 
-De database wordt automatisch klaargezet. Jij hoeft alleen twee accounts aan te maken en een paar keer te klikken.
+**Helemaal gratis.** Je hebt alleen een gratis Vercel-account nodig (inloggen met GitHub). De database wordt automatisch klaargezet.
 
-### Stap 1: AI-sleutel voor receptfoto's (Anthropic)
-1. Ga naar [console.anthropic.com](https://console.anthropic.com) en maak een account aan.
-2. Kies **Billing** en zet er €5 tegoed op. Eén receptfoto kost een paar cent.
-3. Kies **API Keys** → **Create Key** en kopieer de sleutel (begint met `sk-ant-`).
-
-### Stap 2: App online zetten (Vercel, gratis)
+### Stap 1: App online zetten (Vercel, gratis)
 1. Ga naar [vercel.com](https://vercel.com) → **Sign Up** → **Continue with GitHub**.
 2. Kies **Add New… → Project** → **Boodschappen-app** → **Import**.
-3. Open **Environment Variables** en voeg toe: naam `ANTHROPIC_API_KEY`, waarde: de sleutel uit stap 1.
-4. Klik op **Deploy**. Je krijgt een adres zoals `boodschappen-app-xxx.vercel.app`. De app zegt dan nog "Bijna klaar"; dat klopt.
+3. Klik op **Deploy**. Je krijgt een adres zoals `boodschappen-app-xxx.vercel.app`. De app zegt dan nog "Bijna klaar"; dat klopt.
 
-### Stap 3: Database koppelen (Supabase via Vercel, gratis)
+### Stap 2: Database koppelen (Supabase via Vercel, gratis)
 1. Open in Vercel je project → tab **Storage** → **Create Database** → **Supabase** → gratis plan, regio *Frankfurt* of *Londen* → **Create** en daarna **Connect**.
    Vercel vult nu zelf alle databasegegevens in.
 2. Ga naar tab **Deployments** → ⋯ bij de bovenste → **Redeploy**.
@@ -38,10 +33,17 @@ De database wordt automatisch klaargezet. Jij hoeft alleen twee accounts aan te 
 
 De prijzen worden elke ochtend ververst, en ook meteen als je iets toevoegt of op ↻ drukt.
 
-### Stap 4: Op jullie telefoons
+### Stap 3: Op jullie telefoons
 - **iPhone:** open het adres in Safari → *Nieuwe gedeelde lijst starten* → deelknop → **Zet op beginscherm**.
 - In de app: **Winkels & delen** → **Deel uitnodiging**, en stuur de link via WhatsApp naar je partner.
 - **Android:** open de link in Chrome → *Meedoen met de lijst* → menu ⋮ → **App installeren**.
+
+<details>
+<summary>Optioneel: slimmere receptherkenning met AI (betaald)</summary>
+
+Het gratis uitlezen werkt goed bij gedrukte recepten. Voor handgeschreven briefjes of rommelige foto's kun je een Anthropic API-sleutel toevoegen (`ANTHROPIC_API_KEY` in Vercel, een paar cent per foto). Dat staat los van een Claude-abonnement. Zonder sleutel gebruikt de app gewoon de gratis methode.
+
+</details>
 
 <details>
 <summary>Liever zelf een Supabase-project aanmaken?</summary>

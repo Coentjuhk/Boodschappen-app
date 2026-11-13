@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLine, parseList, normalizeQuery } from '../shared/text';
+import { parseLine, parseList, normalizeQuery, extractIngredients, detectServings, looksLikeRecipe } from '../shared/text';
 import { offerTotal, evaluateOffer } from '../shared/offers';
 import { guessCategory } from '../shared/catalog';
 import { plan, type Candidate, type OptStore } from '../shared/optimizer';
@@ -98,5 +98,31 @@ describe('optimizer', () => {
   it('vastgezette winkel wint', () => {
     const r = plan([{ ...items[0], store_id: 'ah' }], cands, stores, { mode: 'cheapest', storeIds: [], extraStorePenalty: 0 });
     expect(r.assignments.melk.store_id).toBe('ah');
+  });
+});
+
+describe('recepttekst', () => {
+  const recipe = `Lasagne
+Voor 4 personen
+Ingrediënten
+500 g rundergehakt
+1 ui, gesnipperd
+2 teentjes knoflook
+1 blik tomatenblokjes
+12 lasagnebladen
+200 g geraspte kaas
+snufje zout
+2 eetlepels olijfolie
+Bereiding
+Verwarm de oven voor op 200 graden. Bak het gehakt rul.`;
+  it('herkent een recept', () => expect(looksLikeRecipe(recipe)).toBe(true));
+  it('vindt het aantal personen', () => expect(detectServings(recipe)).toBe(4));
+  it('haalt alleen ingrediënten eruit', () => {
+    const r = extractIngredients(recipe);
+    expect(r.map((x) => x.name)).toEqual(['Rundergehakt', 'Ui', 'Knoflook', 'Tomatenblokjes', 'Lasagnebladen', 'Geraspte kaas', 'Zout', 'Olijfolie']);
+    expect(r.find((x) => x.name === 'Rundergehakt')).toMatchObject({ quantity: 500, unit: 'g' });
+    expect(r.find((x) => x.name === 'Knoflook')).toMatchObject({ quantity: 2, unit: 'teen' });
+    expect(r.find((x) => x.name === 'Zout')?.pantry).toBe(true);
+    expect(r.find((x) => x.name === 'Olijfolie')).toMatchObject({ pantry: true, quantity: 1, unit: undefined });
   });
 });

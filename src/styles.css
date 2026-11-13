@@ -165,3 +165,8 @@ input[type=range] { padding: 0; border: 0; background: none; accent-color: var(-
 .switch span::after { content: ''; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: .15s; }
 .switch input:checked + span { background: var(--brand); }
 .switch input:checked + span::after { transform: translateX(18px); }
+
+.plain { border: 0; background: transparent; padding: 2px 0; flex: 1; min-width: 0; }
+.ingredients .check { background: none; }
+.ingredients .check.on { background: var(--brand); }
+.raw { white-space: pre-wrap; font-size: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 40dvh; overflow: auto; }
