@@ -72,10 +72,9 @@ export default function SettingsView({ household, data, prefs, savePrefs, onJoin
       <section className="card">
         <h2>Andere lijst openen</h2>
         <p className="small">Heb je per ongeluk een tweede lijst gemaakt, of wil je met iemand anders meedoen? Vul de code van die lijst in.</p>
-        <div className="manual">
+        <div className="addrow wait-add">
           <input value={otherCode} placeholder="Code, bv. K7Q2PA" autoCapitalize="characters" autoCorrect="off"
             onChange={(e) => setOtherCode(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') switchList(); }} />
-          <span />
           <button className="secondary" disabled={switching || !otherCode.trim()} onClick={switchList}>Overstappen</button>
         </div>
       </section>
