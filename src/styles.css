@@ -111,7 +111,9 @@ label.icon-btn { cursor: pointer; }
 
 .row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); min-height: 64px; }
 .row:last-child { border-bottom: 0; }
-.check { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 14px; color: #fff; }
+.check { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; font-size: 14px; color: #fff; position: relative; }
+/* Groter tikvlak dan de cirkel zelf: makkelijker raak te tikken met een kar in je hand */
+button.check::after { content: ''; position: absolute; inset: -12px; }
 .check.on { background: var(--brand); border-color: var(--brand); }
 .thumb { flex: none; width: 44px; height: 44px; border-radius: 10px; background: #fff; display: grid; place-items: center; font-size: 22px; overflow: hidden; border: 1px solid var(--line); }
 .thumb img { width: 100%; height: 100%; object-fit: contain; }
@@ -140,8 +142,11 @@ label.icon-btn { cursor: pointer; }
 
 .price-store { margin-bottom: 10px; }
 .price-store-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 6px 2px; }
-.product { display: flex; width: 100%; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; }
+.product { display: flex; align-items: stretch; background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; overflow: hidden; }
+.product.used { border-color: var(--brand); }
 .product.pinned { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.product-main { display: flex; flex: 1; min-width: 0; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; }
+.product-del { flex: none; width: 40px; color: var(--muted); border-left: 1px solid var(--line); font-size: 15px; }
 .manual { display: grid; grid-template-columns: 1fr 100px auto; gap: 8px; }
 
 .reading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 0 20px; }
@@ -188,3 +193,14 @@ input[type=range] { padding: 0; border: 0; background: none; accent-color: var(-
 .bon .info { flex: 1; min-width: 0; }
 .bon .info .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bon-price { width: 72px; flex: none; text-align: right; padding: 6px 8px; }
+
+.soon { font-size: 12px; color: var(--brand); margin-top: 2px; }
+.netbar { position: sticky; top: 0; z-index: 6; height: 30px; line-height: 30px; background: var(--offer-soft); color: var(--offer); font-size: 13px; font-weight: 600; padding: 0 16px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app.offline .addbar { top: 30px; }
+.toast { position: fixed; left: 12px; right: 12px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 30; max-width: 616px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--text); color: var(--bg); border-radius: 12px; padding: 12px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.25); animation: up .15s ease-out; }
+.toast span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast button { flex: none; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px; }
+.row.checked { cursor: pointer; }
+.row.checked .name { flex: 1; }

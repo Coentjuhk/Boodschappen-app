@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Household, Settings, Store } from '../lib/types';
+import type { Household, Store } from '../lib/types';
+import type { Prefs } from '../lib/prefs';
 import type { useLiveData } from '../lib/useHousehold';
 import { getMyName, setMyName } from '../lib/useHousehold';
 import type { StoreKind } from '../../shared/catalog';
@@ -9,14 +10,34 @@ import { euro } from '../../shared/text';
 type Data = ReturnType<typeof useLiveData>;
 const KINDS: StoreKind[] = ['supermarkt', 'drogist', 'slager', 'bakker', 'bouwmarkt', 'dierenwinkel', 'primera', 'slijterij', 'overig'];
 
-export default function SettingsView({ household, data, saveSettings }: {
-  household: Household; data: Data; saveSettings: (p: Partial<Settings>) => void;
+export default function SettingsView({ household, data, prefs, savePrefs, onJoin }: {
+  household: Household;
+  data: Data;
+  prefs: Prefs;
+  savePrefs: (p: Partial<Prefs>) => void;
+  onJoin: (code: string, displayName: string) => Promise<void>;
 }) {
   const link = `${location.origin}/?code=${household.join_code}`;
   const [copied, setCopied] = useState(false);
   const [edit, setEdit] = useState<Partial<Store> | null>(null);
   const [me, setMe] = useState(getMyName());
-  const penalty = household.settings.extraStorePenalty ?? 1.5;
+  const penalty = prefs.extraStorePenalty;
+  const [otherCode, setOtherCode] = useState('');
+  const [switching, setSwitching] = useState(false);
+  const ownPrices = data.prices.filter((p) => p.household_id).length;
+
+  const switchList = async () => {
+    const code = otherCode.trim().toUpperCase();
+    if (!code || code === household.join_code.toUpperCase()) return;
+    setSwitching(true);
+    try {
+      await onJoin(code, getMyName() || 'Ik');
+    } catch (e: any) {
+      data.notify(e.message ?? String(e));
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   const share = async () => {
     const text = `Doe mee met onze boodschappenlijst: ${link}`;
@@ -33,6 +54,7 @@ export default function SettingsView({ household, data, saveSettings }: {
       <section className="card">
         <h2>Samen één lijst</h2>
         <p>Laat je partner deze link openen (of de code invullen). Daarna zien jullie elkaars wijzigingen direct.</p>
+        <p className="muted small">Bewaar deze code: op een nieuwe telefoon of na het wissen van je browser kom je er weer mee bij jullie lijst.</p>
         <div className="code">{household.join_code}</div>
         <button className="primary big" onClick={share}>{copied ? 'Link gekopieerd ✓' : 'Deel uitnodiging'}</button>
         <label className="field">
@@ -43,20 +65,31 @@ export default function SettingsView({ household, data, saveSettings }: {
 
       <section className="card">
         <h2>Op je beginscherm zetten</h2>
-        <p className="small"><strong>iPhone (Safari):</strong> deel-knop <span aria-hidden>⎋</span> → "Zet op beginscherm".</p>
+        <p className="small"><strong>iPhone (Safari):</strong> deelknop → "Zet op beginscherm". De app op je beginscherm vraagt de eerste keer alleen nog je naam en opent dan deze lijst.</p>
         <p className="small"><strong>Android (Chrome):</strong> menu ⋮ → "App installeren" of "Toevoegen aan startscherm".</p>
+      </section>
+
+      <section className="card">
+        <h2>Andere lijst openen</h2>
+        <p className="small">Heb je per ongeluk een tweede lijst gemaakt, of wil je met iemand anders meedoen? Vul de code van die lijst in.</p>
+        <div className="manual">
+          <input value={otherCode} placeholder="Code, bv. K7Q2PA" autoCapitalize="characters" autoCorrect="off"
+            onChange={(e) => setOtherCode(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') switchList(); }} />
+          <span />
+          <button className="secondary" disabled={switching || !otherCode.trim()} onClick={switchList}>Overstappen</button>
+        </div>
       </section>
 
       <section className="card">
         <h2>Is een extra winkel het waard?</h2>
         <p className="small">Bij "Goedkoopst" stuurt de app je pas naar een extra winkel als je daar minstens <strong>{euro(penalty)}</strong> mee bespaart.</p>
-        <input type="range" min={0} max={10} step={0.5} value={penalty} onChange={(e) => saveSettings({ extraStorePenalty: Number(e.target.value) })} />
+        <input type="range" min={0} max={10} step={0.5} value={penalty} onChange={(e) => savePrefs({ extraStorePenalty: Number(e.target.value) })} />
         <div className="muted small range-labels"><span>€0 (altijd goedkoopst)</span><span>€10</span></div>
       </section>
 
       <section className="card">
         <h2>Winkels</h2>
-        <p className="muted small">Automatische prijzen en aanbiedingen: {AUTO_PRICE_CHAINS.map((c) => c.toUpperCase()).join(', ')}. Bij andere winkels kun je per product zelf een prijs invullen.</p>
+        <p className="muted small">Automatische prijzen en aanbiedingen: {AUTO_PRICE_CHAINS.map((c) => c.toUpperCase()).join(', ')}. Bij andere winkels leert de app de prijzen van je kassabonnen (🧾 bovenaan de lijst), of je vult ze per product zelf in.{ownPrices > 0 ? ` Jullie hebben nu ${ownPrices} eigen ${ownPrices === 1 ? 'prijs' : 'prijzen'} opgeslagen.` : ''}</p>
         <ul className="stores">
           {data.stores.map((s) => (
             <li key={s.id}>

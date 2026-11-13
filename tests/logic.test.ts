@@ -3,7 +3,6 @@ import { parseLine, parseList, normalizeQuery, extractIngredients, detectServing
 import { offerTotal, evaluateOffer } from '../shared/offers';
 import { guessCategory } from '../shared/catalog';
 import { plan, type Candidate, type OptStore } from '../shared/optimizer';
-import { stem } from '../src/lib/candidates';
 
 describe('lijst plakken', () => {
   it('begrijpt hoeveelheden', () => {
@@ -33,6 +32,16 @@ describe('aanbiedingen', () => {
   it('2e halve prijs', () => expect(offerTotal(p('2e halve prijs'), 2)).toBe(3));
   it('N voor P', () => expect(offerTotal(p('3 voor 5,00'), 4)).toBe(7));
   it('% korting', () => expect(offerTotal(p('25% korting'), 2)).toBe(3));
+  it('N stuks X% korting geldt pas vanaf N', () => {
+    expect(offerTotal(p('2 stuks 25% korting'), 1)).toBe(2);
+    expect(offerTotal(p('2 stuks 25% korting'), 2)).toBe(3);
+  });
+  it('actieprijs van de winkel ("40% korting", "VOOR 1.99")', () => {
+    expect(offerTotal({ price: 4.55, base_price: 7.59, mechanic: '40% korting' }, 1)).toBe(4.55);
+    expect(offerTotal({ price: 1.99, base_price: 2.99, mechanic: 'VOOR 1.99' }, 2)).toBe(3.98);
+    expect(offerTotal({ price: 2.89, base_price: 2.89, mechanic: '2 voor 4.99' }, 3)).toBe(7.88);
+    expect(offerTotal({ price: 2.99, base_price: 2.99, mechanic: '2 + 1 gratis' }, 3)).toBe(5.98);
+  });
   it('geeft bundeltip', () => {
     expect(evaluateOffer(p('1+1 gratis'), 1).bundleTip?.text).toMatch(/Neem er 2: zelfde prijs/);
     expect(evaluateOffer({ price: 2 }, 1).bundleTip).toBeUndefined();
@@ -132,14 +141,5 @@ Verwarm de oven voor op 200 graden. Bak het gehakt rul.`;
     expect(r.find((x) => x.name === 'Knoflook')).toMatchObject({ quantity: 2, unit: 'teen' });
     expect(r.find((x) => x.name === 'Zout')?.pantry).toBe(true);
     expect(r.find((x) => x.name === 'Olijfolie')).toMatchObject({ pantry: true, quantity: 1, unit: undefined });
-  });
-});
-
-describe('woordstam', () => {
-  it('vindt enkelvoud bij meervoud', () => {
-    expect('ah banan'.includes(stem('bananen'))).toBe(true);
-    expect(stem('kaas')).toBe('kas');
-    expect('kattenvoer'.replace(/(.)\1+/g, '$1').includes(stem('kaas'))).toBe(false);
-    expect(stem('eieren')).toBe('eieren'); // te kort om te strippen; titels bevatten meestal 'eieren'
   });
 });

@@ -1,5 +1,6 @@
 -- Boodschappen-app database
--- Plak dit hele bestand in Supabase → SQL Editor → Run.
+-- Wordt bij elke deploy automatisch uitgevoerd (scripts/migrate.mjs) en mag dus vaker draaien.
+-- Handmatig kan ook: plak dit hele bestand in Supabase → SQL Editor → Run.
 
 create extension if not exists pgcrypto;
 
@@ -79,6 +80,11 @@ create table if not exists prices (
   rank int not null default 0,       -- positie in zoekresultaat (0 = meest relevant)
   fetched_at timestamptz not null default now()
 );
+-- Later toegevoegd: hoe goed het product bij de zoekterm past (0 = titel, 1 = categorie, 2 = deels, 3 = twijfel)
+-- en vanaf wanneer een actie geldt (kan in de toekomst liggen: "vanaf maandag in de bonus").
+alter table prices add column if not exists match smallint;
+alter table prices add column if not exists offer_from date;
+
 create unique index if not exists prices_auto_unique on prices(chain, query, product_id) where household_id is null;
 create unique index if not exists prices_manual_unique on prices(household_id, store_id, query) where household_id is not null;
 create index if not exists prices_query on prices(query);

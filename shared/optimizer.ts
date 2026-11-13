@@ -36,10 +36,22 @@ export interface Candidate extends PricedProduct {
   size?: string | null;
   image_url?: string | null;
   offer_until?: string | null;
+  /** Waaronder een keuze onthouden wordt: de keten ("ah") of, bij een eigen prijs, de winkel. */
+  pin_key?: string;
+  /** Door jullie zelf gekozen product voor deze winkel. */
   pinned?: boolean;
-  /** Twijfelachtige match (naam komt niet overeen): alleen tonen om te kiezen, niet automatisch rekenen. */
+  /** Twijfelachtige match (naam past niet): tonen om te kiezen, maar niet automatisch mee rekenen. */
   weak?: boolean;
+  /** Past wel, maar is niet de standaardkeus voor deze winkel. */
+  alt?: boolean;
+  /** Eigen prijs: zelf ingevuld of van een kassabon. */
+  learned?: boolean;
+  /** Actie die nog moet beginnen ("vanaf maandag in de bonus"). */
+  upcoming?: { mechanic: string; from: string } | null;
 }
+
+/** Telt deze kandidaat mee bij het kiezen van de winkel? */
+export const isUsed = (c: Candidate) => !!c.pinned || (!c.weak && !c.alt);
 
 export interface Assignment {
   item_id: string;
@@ -74,8 +86,7 @@ function sells(store: OptStore, category: string) {
 /** Beste prijs per winkel per product. */
 function bestPerStore(item: OptItem, cands: Candidate[]) {
   const out = new Map<string, { cand: Candidate; total: number; perUnit: number; tip?: string }>();
-  const pinned = cands.filter((c) => c.pinned);
-  for (const c of pinned.length ? pinned : cands.filter((c) => !c.weak)) {
+  for (const c of cands.filter(isUsed)) {
     const ev = evaluateOffer(c, packCount(item));
     const cur = out.get(c.store_id);
     if (!cur || ev.total < cur.total) out.set(c.store_id, { cand: c, total: ev.total, perUnit: ev.perUnit, tip: ev.bundleTip?.text });

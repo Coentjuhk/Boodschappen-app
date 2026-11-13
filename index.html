@@ -10,6 +10,21 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Boodschappen</title>
+    <script>
+      // Is de code van je lijst al bekend (uit de link of van een eerder bezoek)? Dan krijgt het
+      // beginscherm-icoon die code mee, zodat de app op je beginscherm dezelfde lijst opent.
+      (function () {
+        try {
+          var code = new URLSearchParams(location.search).get('code');
+          if (!code) code = (JSON.parse(localStorage.getItem('bs.household') || 'null') || {}).join_code;
+          if (!code || !/^[A-Za-z0-9]{4,12}$/.test(code)) return;
+          document.addEventListener('DOMContentLoaded', function () {
+            var link = document.querySelector('link[rel="manifest"]');
+            if (link) link.setAttribute('href', '/api/manifest?code=' + code.toUpperCase());
+          });
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

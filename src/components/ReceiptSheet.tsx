@@ -1,26 +1,20 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { readText } from '../lib/ocr';
-import { stem } from '../lib/candidates';
+import { looselyMatches, wordsOf } from '../../shared/match';
 import type { Item, Store } from '../lib/types';
 import { netUnitPrice, parseReceipt, type ReceiptLine } from '../../shared/receipt';
-import { euro, normalizeQuery } from '../../shared/text';
+import { euro } from '../../shared/text';
 
 interface Row { line: ReceiptLine; name: string; price: string; on: boolean }
 interface Bon { storeId: string; rows: Row[]; total: number | null; raw: string }
 
 /** Naam op de bon ("HALFV MELK") koppelen aan een product op jullie lijst ("Halfvolle melk"), als dat lukt. */
 function matchItem(receiptName: string, items: Item[]): string | null {
-  const r = normalizeQuery(receiptName).replace(/(.)\1+/g, '$1');
-  let best: { name: string; score: number } | null = null;
-  for (const i of items) {
-    const words = normalizeQuery(i.name).split(' ').filter((w) => w.length > 2).map(stem);
-    if (!words.length) continue;
-    const hits = words.filter((w) => r.includes(w) || r.includes(w.slice(0, 4))).length;
-    const score = hits / words.length;
-    if (score >= 0.99 && (!best || score > best.score)) best = { name: i.name, score };
-  }
-  return best?.name ?? null;
+  const hits = [...new Set(items.map((i) => i.name))].filter((name) => looselyMatches(name, receiptName));
+  if (!hits.length) return null;
+  // Meerdere kandidaten ("Melk" en "Halfvolle melk")? Dan de meest specifieke.
+  return hits.sort((a, b) => wordsOf(b).length - wordsOf(a).length)[0];
 }
 
 export default function ReceiptSheet({ files, stores, items, onSave, onClose }: {

@@ -11,6 +11,8 @@ export interface Settings {
   single?: string;           // winkel-id
   extraStorePenalty?: number;
   showChecked?: boolean;
+  /** Onthouden productkeuzes per zoekterm, zodat "melk" volgende keer weer hetzelfde product is. */
+  pins?: Record<string, Pins>;
 }
 
 export interface Store {
@@ -36,7 +38,8 @@ export interface Item {
   note: string | null;
   category: string;
   store_id: string | null;
-  pinned: { chain?: string; store_id?: string; product_id: string; title: string } | null;
+  /** Gekozen product per keten of winkel. (Oude vorm: één keuze, { chain, store_id, product_id, title }.) */
+  pinned: Pins | { chain?: string; store_id?: string; product_id: string; title: string } | null;
   checked: boolean;
   wait_offer: boolean;
   target_price: number | null;
@@ -45,6 +48,9 @@ export interface Item {
   created_at: string;
   updated_at: string;
 }
+
+/** Sleutel: keten ("ah") of, bij een eigen prijs, het winkel-id. */
+export type Pins = Record<string, { product_id: string; title: string }>;
 
 export interface PriceRow {
   id: string;
@@ -58,8 +64,10 @@ export interface PriceRow {
   price: number;
   base_price: number | null;
   mechanic: string | null;
+  offer_from?: string | null;
   offer_until: string | null;
   online_only: boolean;
+  match?: number | null;
   image_url: string | null;
   url: string | null;
   rank: number;

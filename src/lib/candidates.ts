@@ -1,76 +1,123 @@
-import type { Candidate } from '../../shared/optimizer';
+import { isUsed, packCount, type Candidate } from '../../shared/optimizer';
+import { evaluateOffer, localDate, offerState } from '../../shared/offers';
+import { looselyMatches, matchLevel, wordsOf } from '../../shared/match';
 import { normalizeQuery } from '../../shared/text';
-import type { Item, PriceRow, Store } from './types';
+import type { Item, Pins, PriceRow, Store } from './types';
+
+/** Gekozen producten per winkel/keten. Leest ook de oude vorm (één keuze per product). */
+export function pinsOf(pinned: Item['pinned']): Pins {
+  if (!pinned) return {};
+  const legacy = pinned as { chain?: string; store_id?: string; product_id?: unknown; title?: string };
+  if (typeof legacy.product_id === 'string') {
+    const key = legacy.product_id === 'handmatig' ? legacy.store_id : legacy.chain;
+    return key ? { [key]: { product_id: legacy.product_id, title: legacy.title ?? '' } } : {};
+  }
+  return pinned as Pins;
+}
 
 /**
- * Welke producten komen in aanmerking voor een lijst-item, per winkel?
- * Automatische prijzen gelden per keten (AH 't Plateau, AH De Akkers en AH bezorgen delen dus dezelfde prijs).
- * We nemen alleen goed passende resultaten: titel bevat alle woorden van het item, anders de top 3 van de zoekopdracht.
+ * Welke producten horen bij een lijst-item, per winkel? Per winkel is er hooguit één standaardkeus:
+ *  1. het product dat jullie zelf kozen (📌)
+ *  2. een eigen prijs met precies deze naam (zelf ingevuld of van een kassabon)
+ *  3. een eigen prijs met bijna dezelfde naam ("Melk" ↔ bon "Halfv melk"), als dat er maar één is
+ *  4. het product dat de winkel zelf als beste resultaat geeft en waarvan de naam past
+ * De rest wordt wel getoond (om uit te kiezen), maar telt niet mee.
  */
-export function candidatesFor(item: Item, prices: PriceRow[], stores: Store[]): Candidate[] {
+export function candidatesFor(item: Item, prices: PriceRow[], stores: Store[], today = localDate()): Candidate[] {
   const q = normalizeQuery(item.name);
-  const words = q.split(' ').filter((w) => w.length > 1).map(stem);
-  const rows = prices.filter((p) => p.query === q);
+  const pins = pinsOf(item.pinned);
   const out: Candidate[] = [];
 
-  const auto = rows.filter((p) => !p.household_id);
-  const byChain = new Map<string, PriceRow[]>();
-  for (const p of auto) byChain.set(p.chain!, [...(byChain.get(p.chain!) ?? []), p]);
+  const auto = prices
+    .filter((p) => !p.household_id && p.query === q && p.chain)
+    // Oude rijen (van vóór de opschoning) met online-bundels overslaan
+    .filter((p) => !(p.match == null && /volume\s*voordeel/i.test(p.mechanic ?? '')))
+    .map((p) => ({ row: p, level: p.match ?? matchLevel(q, p.title) }))
+    .sort((a, b) => a.level - b.level || a.row.rank - b.row.rank);
+  const own = prices.filter((p) => p.household_id && p.store_id);
+  const extraWords = (p: PriceRow) => Math.abs(wordsOf(p.query).length - wordsOf(q).length);
 
-  for (const [chain, list] of byChain) {
-    const matching = list.filter((p) => {
-      const t = collapse(normalizeQuery(p.title));
-      return words.every((w) => t.includes(w));
-    });
-    // Geen product met de juiste naam? Dan tonen we de bovenste resultaten wel om uit te kiezen,
-    // maar rekenen we er niet automatisch mee (voorkomt "kattenbakzakken" als goedkoopste kattenvoer).
-    const weak = matching.length === 0;
-    const pool = (weak ? list : matching).sort((a, b) => a.rank - b.rank).slice(0, weak ? 4 : 6);
-    // Een vastgepind product altijd meenemen
-    const pinned = item.pinned?.chain === chain ? list.find((p) => p.product_id === item.pinned!.product_id) : undefined;
-    if (pinned && !pool.includes(pinned)) pool.push(pinned);
-    for (const s of stores.filter((s) => s.enabled && s.chain === chain)) {
-      for (const p of pool) out.push({ ...toCand(p, s.id, !!pinned && p === pinned), weak: weak && p !== pinned });
+  for (const store of stores.filter((s) => s.enabled)) {
+    const list: Candidate[] = [];
+
+    // Eigen prijzen voor deze winkel
+    const mine = own.filter((p) => p.store_id === store.id);
+    const exact = mine.find((p) => p.query === q);
+    const near = mine
+      .filter((p) => p.query !== q && (looselyMatches(item.name, p.query) || looselyMatches(item.name, p.title)))
+      .sort((a, b) => extraWords(a) - extraWords(b) || (a.fetched_at < b.fetched_at ? 1 : -1));
+    if (exact) list.push({ ...toCand(exact, store.id, today), product_id: 'handmatig', pin_key: store.id, learned: true });
+    for (const p of near.slice(0, 4)) list.push({ ...toCand(p, store.id, today), product_id: `handmatig:${p.query}`, pin_key: store.id, learned: true });
+    const clearNear = near.length === 1 || (near.length > 1 && extraWords(near[0]) < extraWords(near[1]));
+
+    // Automatische prijzen van de keten (AH 't Plateau, AH De Akkers en AH bezorgen delen dezelfde prijzen)
+    const rows = store.chain ? auto.filter((a) => a.row.chain === store.chain && (!a.row.online_only || store.online)) : [];
+    const best = rows[0]?.level ?? 3;
+    const fits = (level: number) => (best <= 1 ? level <= 1 : best === 2 ? level === 2 : false);
+    for (const a of rows) list.push({ ...toCand(a.row, store.id, today), pin_key: store.chain!, weak: !fits(a.level) });
+
+    // Standaardkeus voor deze winkel
+    const ownPin = pins[store.id] && list.find((c) => c.learned && c.product_id === pins[store.id].product_id);
+    const chainPin = store.chain && pins[store.chain] ? list.find((c) => !c.learned && c.product_id === pins[store.chain!].product_id) : undefined;
+    // Een eigen keuze (📌) gaat altijd voor.
+    const pinned = ownPin ?? chainPin;
+    const def =
+      pinned ??
+      (exact ? list[0] : undefined) ??
+      (clearNear ? list.find((c) => c.learned) : undefined) ??
+      list.find((c) => !c.learned && !c.weak);
+    for (const c of list) {
+      c.pinned = c === pinned;
+      c.alt = c !== def && !c.weak;
+      out.push(c);
     }
-  }
-  for (const p of rows.filter((p) => p.household_id && p.store_id)) {
-    const s = stores.find((x) => x.id === p.store_id && x.enabled);
-    if (s) out.push(toCand(p, s.id, item.pinned?.store_id === s.id && item.pinned.product_id === 'handmatig'));
   }
   return out;
 }
 
-function toCand(p: PriceRow, storeId: string, pinned: boolean): Candidate {
+function toCand(p: PriceRow, storeId: string, today: string): Candidate {
+  const state = offerState(p, today);
+  const base = p.base_price == null ? null : Number(p.base_price);
+  const active = state === 'active';
   return {
     store_id: storeId,
     product_id: p.product_id,
     title: p.title,
     size: p.size,
     image_url: p.image_url,
-    price: Number(p.price),
-    base_price: p.base_price == null ? null : Number(p.base_price),
-    mechanic: p.mechanic,
-    offer_until: p.offer_until,
-    pinned,
+    // Is de actie voorbij of nog niet begonnen, dan geldt de gewone prijs.
+    price: active || state === 'none' ? Number(p.price) : (base ?? Number(p.price)),
+    base_price: base,
+    mechanic: active ? p.mechanic : null,
+    offer_until: active ? p.offer_until : null,
+    upcoming: state === 'upcoming' ? { mechanic: p.mechanic!, from: p.offer_from! } : null,
   };
-}
-
-/** Dubbele letters samenvoegen ("banaan" → "banan"), zodat enkelvoud/meervoud elkaar vinden. */
-const collapse = (s: string) => s.replace(/(.)\1+/g, '$1');
-
-/** Eenvoudige stam: "bananen" vindt "banaan", "kaas" blijft "kas". */
-export function stem(w: string) {
-  const s = collapse(w.replace(/(eren|en|s)$/, ''));
-  return s.length >= 3 || w.length <= 3 ? s : collapse(w);
 }
 
 /**
  * Wachtlijst: is er nu een goede deal voor dit product?
- * Ja als een (goed passend of gekozen) product in de aanbieding is, of onder de richtprijs per stuk zit.
+ * Ja als een passend (of zelf gekozen) product nu in de aanbieding is, of onder de richtprijs per stuk zit.
  */
 export function dealsFor(item: Item, cands: Candidate[]): Candidate[] {
   const target = item.target_price == null ? null : Number(item.target_price);
-  const pinned = cands.filter((c) => c.pinned);
-  const pool = pinned.length ? pinned : cands.filter((c) => !c.weak);
-  return pool.filter((c) => (target != null ? Number(c.price) <= target : !!c.mechanic));
+  const packs = packCount({ quantity: Number(item.quantity), unit: item.unit });
+  return dealPool(cands)
+    .filter((c) => (target != null ? evaluateOffer(c, packs).perUnit <= target : !!c.mechanic))
+    .map((c) => ({ ...c, alt: false }));
+}
+
+/** Wachtlijst: een actie die binnenkort begint ("vanaf maandag"). */
+export function upcomingFor(cands: Candidate[]): Candidate | undefined {
+  return dealPool(cands).filter((c) => c.upcoming).sort((a, b) => (a.upcoming!.from < b.upcoming!.from ? -1 : 1))[0];
+}
+
+// Hebben jullie zelf een product gekozen, dan tellen alleen acties op dát product.
+function dealPool(cands: Candidate[]): Candidate[] {
+  const chosen = cands.filter((c) => c.pinned);
+  return chosen.length ? chosen : cands.filter((c) => !c.weak);
+}
+
+/** Goedkoopste standaardkeus (voor "nu € … bij …" op de wachtlijst). */
+export function cheapestUsed(cands: Candidate[]): Candidate | undefined {
+  return cands.filter(isUsed).sort((a, b) => a.price - b.price)[0];
 }

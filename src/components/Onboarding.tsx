@@ -32,15 +32,16 @@ export default function Onboarding(props: {
         <>
           <label className="field">
             <span>Code van het huishouden</span>
-            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ABC123" />
+            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ABC123" autoCapitalize="characters" autoCorrect="off" />
           </label>
-          <button className="primary big" disabled={busy} onClick={() => run(() => props.onJoin(code, me))}>Meedoen met de lijst</button>
+          <button className="primary big" disabled={busy} onClick={() => run(() => (code.trim() ? props.onJoin(code, me) : Promise.reject(new Error('Vul de code van de lijst in'))))}>Meedoen met de lijst</button>
           <button className="link" onClick={() => setJoining(false)}>Ik wil een nieuwe lijst beginnen</button>
         </>
       ) : (
         <>
           <button className="primary big" disabled={busy} onClick={() => run(() => props.onCreate('Ons huishouden', me))}>Nieuwe gedeelde lijst starten</button>
-          <button className="secondary big" disabled={busy} onClick={() => setJoining(true)}>Ik heb een code gekregen</button>
+          <button className="secondary big" disabled={busy} onClick={() => setJoining(true)}>Ik heb al een lijst of een code</button>
+          <p className="muted small">Gebruikte je de app al op deze telefoon of bij je partner? Kies dan de tweede knop en vul de code in (te vinden onder Winkels & delen).</p>
         </>
       )}
       {err && <p className="error">{err}</p>}
