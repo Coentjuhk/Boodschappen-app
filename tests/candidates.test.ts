@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { candidatesFor, cheapestUsed, dealsFor, pinsOf, upcomingFor } from '../src/lib/candidates';
+import { candidatesFor, cheapestUsed, dealsFor, explainSkipped, pinsOf, skippedOffer, upcomingFor } from '../src/lib/candidates';
+import { parseAmount } from '../shared/units';
 import { isUsed } from '../shared/optimizer';
 import { matchLevel, looselyMatches, stem, storeTerm } from '../shared/match';
 import type { Item, PriceRow, Store } from '../src/lib/types';
@@ -108,7 +109,7 @@ describe('acties in de tijd', () => {
     const cs = candidatesFor(item('Knakworsten', { wait_offer: true }), [bonus('2026-11-16', '2026-11-22')], stores, today);
     expect(cs[0]).toMatchObject({ mechanic: null, price: 2.89, upcoming: { mechanic: '2 voor 4.99', from: '2026-11-16' } });
     expect(dealsFor(item('Knakworsten', { wait_offer: true }), cs)).toHaveLength(0);
-    expect(upcomingFor(cs)?.upcoming?.from).toBe('2026-11-16');
+    expect(upcomingFor(item('Knakworsten', { wait_offer: true }), cs)?.upcoming?.from).toBe('2026-11-16');
   });
   it('lopende actie is een deal', () => {
     const cs = candidatesFor(item('Knakworsten', { wait_offer: true }), [bonus('2026-11-09', '2026-11-15')], stores, today);
@@ -128,5 +129,82 @@ describe('acties in de tijd', () => {
     const target = { ...pinnedItem, target_price: 18 };
     expect(dealsFor(target, candidatesFor(target, rows, stores, today)).length).toBeGreaterThan(0);
     expect(cheapestUsed(candidatesFor(pinnedItem, rows, stores, today))?.price).toBe(17.99);
+  });
+});
+
+describe('goede aanbieding of niet', () => {
+  const wait = item('Knakworst', { wait_offer: true });
+  const euro = (x: number) => '€' + x.toFixed(2);
+  // Volgorde = volgorde van de winkel: het eerste product is wat de app nu zou aanraden.
+  const cheap = () => auto('ah', 'knakworst', 'AH Varkens knakworst', 1.29, { size: '400 g' });
+  const unox = (extra: Partial<PriceRow> = {}) => auto('ah', 'knakworst', 'Unox Knaks', 2.89, { size: '400 g', mechanic: '2 voor 4.99', ...extra });
+  const running = { offer_from: '2026-11-09', offer_until: '2026-11-15' };
+  const nextWeek = { offer_from: '2026-11-16', offer_until: '2026-11-22' };
+
+  it('inhoud van verpakkingen', () => {
+    expect(parseAmount('400 g')).toEqual({ value: 0.4, unit: 'kg' });
+    expect(parseAmount('1,5 l')).toEqual({ value: 1.5, unit: 'l' });
+    expect(parseAmount('6 x 200 ml')?.value).toBeCloseTo(1.2);
+    expect(parseAmount('4 + 2 stuks')).toEqual({ value: 6, unit: 'st' });
+    expect(parseAmount('ca. 1006 g')?.value).toBeCloseTo(1.006);
+    expect(parseAmount('per stuk')).toEqual({ value: 1, unit: 'st' });
+    expect(parseAmount(null, 'Jumbo Knakworst 10 Stuks')).toEqual({ value: 10, unit: 'st' });
+    expect(parseAmount(null, 'Jumbo Luiers Maat 5 11-16 kg 31 Stuks')).toEqual({ value: 31, unit: 'st' }); // niet "16 kg"
+    expect(parseAmount(null, 'Pampers Premium Protection Maat 4, 78 Luiers')).toEqual({ value: 78, unit: 'st' });
+    expect(parseAmount(null, 'AH Goudse jong 48+ plakken')).toBeNull();
+    expect(parseAmount('400 g', 'Jumbo Knakworst 10 Stuks')).toEqual({ value: 0.4, unit: 'kg' }); // maat gaat voor
+  });
+
+  it('actie die duurder is dan wat je nu al kunt krijgen telt niet (knakworst)', () => {
+    // 2 voor 4,99 = € 2,50 per stuk, terwijl er knakworst van € 1,29 ligt
+    const cs = candidatesFor(wait, [cheap(), unox(running)], stores, today);
+    expect(dealsFor(wait, cs)).toHaveLength(0);
+    const skipped = skippedOffer(wait, cs)!;
+    expect(skipped).toMatchObject({ mechanic: '2 voor 4.99', per: 'kg', good: false });
+    expect(skipped.cand.title).toBe('Unox Knaks');
+    expect(skipped.mine).toBeCloseTo(6.2375);   // per kilo met de actie
+    expect(skipped.lowest).toBeCloseTo(3.225);  // per kilo: AH Varkens knakworst
+    expect(explainSkipped(skipped, euro)).toBe('€6.24 per kilo, terwijl AH Varkens knakworst €3.23 per kilo kost');
+  });
+  it('ook een aangekondigde actie wordt alleen genoemd als hij voordelig is', () => {
+    const cs = candidatesFor(wait, [cheap(), unox(nextWeek)], stores, today);
+    expect(upcomingFor(wait, cs)).toBeUndefined();
+    expect(skippedOffer(wait, cs)).toMatchObject({ from: '2026-11-16', good: false });
+  });
+  it('actie die onder de gewone prijs komt telt wél, ook als hij nog moet beginnen', () => {
+    const kip = (extra: Partial<PriceRow>) => auto('ah', 'knakworst', 'AH Kip knakworst', 1.55, { size: '400 g', mechanic: '2e halve prijs', ...extra });
+    const now = candidatesFor(wait, [cheap(), kip(running)], stores, today);
+    expect(new Set(dealsFor(wait, now).map((c) => c.title))).toEqual(new Set(['AH Kip knakworst']));
+    expect(skippedOffer(wait, now)).toBeUndefined();
+    const soon = candidatesFor(wait, [cheap(), kip(nextWeek)], stores, today);
+    expect(dealsFor(wait, soon)).toHaveLength(0);
+    expect(upcomingFor(wait, soon)?.title).toBe('AH Kip knakworst');
+  });
+  it('actie op het product dat je nu al zou kopen telt altijd', () => {
+    const cs = candidatesFor(wait, [unox(running), cheap()], stores, today); // Unox staat nu voorop
+    expect(dealsFor(wait, cs).length).toBeGreaterThan(0);
+  });
+  it('eigen merk gekozen: dan telt elke actie op dat merk', () => {
+    const fan = { ...wait, pinned: { ah: { product_id: 'Unox Knaks', title: '' } } };
+    const cs = candidatesFor(fan, [cheap(), unox(running)], stores, today);
+    expect(dealsFor(fan, cs).length).toBeGreaterThan(0);
+    expect(skippedOffer(fan, cs)).toBeUndefined();
+  });
+  it('vergelijkt per stuk bij verschillende verpakkingen (luiers)', () => {
+    const luiers = item('Luiers', { wait_offer: true });
+    const klein = (price: number) => auto('ah', 'luiers', 'AH Luiers', price, { size: '30 stuks' });
+    const pampers = () => auto('ah', 'luiers', 'Pampers Baby-dry luiers', 28.89, { base_price: 57.79, size: '112 stuks', mechanic: '50% korting', ...running });
+    // Actie: € 0,26 per luier. Huismerk € 7,65 per 30 = € 0,26 per luier → even duur, dus een goede aanbieding
+    expect(dealsFor(luiers, candidatesFor(luiers, [klein(7.65), pampers()], stores, today)).length).toBeGreaterThan(0);
+    // Kost het huismerk maar € 0,17 per luier, dan is de actie geen voordeel
+    const cs = candidatesFor(luiers, [klein(4.99), pampers()], stores, today);
+    expect(dealsFor(luiers, cs)).toHaveLength(0);
+    expect(skippedOffer(luiers, cs)).toMatchObject({ per: 'st' });
+  });
+  it('richtprijs blijft gewoon werken', () => {
+    const target = { ...wait, target_price: 1.5 };
+    const cs = candidatesFor(target, [cheap(), unox()], stores, today);
+    expect(dealsFor(target, cs).map((c) => c.title)).toContain('AH Varkens knakworst');
+    expect(skippedOffer(target, cs)).toBeUndefined();
   });
 });

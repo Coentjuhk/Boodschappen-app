@@ -1,5 +1,6 @@
 import { isUsed, packCount, type Candidate } from '../../shared/optimizer';
-import { evaluateOffer, localDate, offerState } from '../../shared/offers';
+import { localDate, offerState, offerTotal, type PricedProduct } from '../../shared/offers';
+import { parseAmount } from '../../shared/units';
 import { looselyMatches, matchLevel, wordsOf } from '../../shared/match';
 import { normalizeQuery } from '../../shared/text';
 import type { Item, Pins, PriceRow, Store } from './types';
@@ -90,31 +91,105 @@ function toCand(p: PriceRow, storeId: string, today: string): Candidate {
     base_price: base,
     mechanic: active ? p.mechanic : null,
     offer_until: active ? p.offer_until : null,
-    upcoming: state === 'upcoming' ? { mechanic: p.mechanic!, from: p.offer_from! } : null,
+    upcoming: state === 'upcoming' ? { mechanic: p.mechanic!, from: p.offer_from!, price: Number(p.price) } : null,
   };
+}
+
+// ---------- Wachtlijst: wanneer is een aanbieding een góéde aanbieding? ----------
+
+const regular = (c: Candidate) => c.base_price ?? c.price;
+const amountOf = (c: Candidate) => parseAmount(c.size, c.title);
+const packsOf = (item: Item) => packCount({ quantity: Number(item.quantity), unit: item.unit });
+
+/** Laagste prijs per stuk die je met de actie kunt krijgen (bij "2 voor 4,99": als je er 2 neemt). */
+function offerPiecePrice(p: PricedProduct, packs: number): number {
+  let best = Infinity;
+  for (let n = packs; n <= packs + 5; n++) best = Math.min(best, offerTotal(p, n) / n);
+  return best;
+}
+
+export interface OfferCheck {
+  cand: Candidate;
+  mechanic: string;
+  from?: string;                      // begint nog (aangekondigd)
+  mine: number;                       // prijs met de actie
+  lowest: number;                     // wat je nu al kunt krijgen zonder actie
+  per: 'kg' | 'l' | 'st' | null;      // vergeleken per kilo/liter/stuk; null = per verpakking
+  versus?: Candidate;                 // het product waarmee vergeleken is
+  good: boolean;
+}
+
+// Een actie telt als hij niet (noemenswaardig) duurder is dan wat je nu al kunt krijgen.
+const TOLERANCE = 1.03;
+
+/**
+ * Een actie is pas een goede aanbieding als je er niet duurder mee uit bent dan met wat de app je nu al
+ * zou aanraden. "2 voor 4,99" (€ 2,50 per stuk) telt dus niet als er ook knakworst van € 1,29 ligt.
+ * Vergelijkt per kilo, liter of stuk als de inhoud bekend is, zodat een groot pak eerlijk meetelt.
+ * Hebben jullie zelf een product gekozen (📌), dan telt elke actie op dát product.
+ */
+function checkOffers(item: Item, cands: Candidate[]): OfferCheck[] {
+  const chosen = cands.filter((c) => c.pinned);
+  const pool = chosen.length ? chosen : cands.filter((c) => !c.weak);        // acties die in aanmerking komen
+  const usual = chosen.length ? chosen : cands.filter(isUsed);               // wat je nu zou kopen, per winkel
+  const packs = packsOf(item);
+  const out: OfferCheck[] = [];
+  for (const c of pool) {
+    const mechanic = c.mechanic ?? c.upcoming?.mechanic;
+    if (!mechanic) continue;
+    const piece = c.mechanic
+      ? offerPiecePrice(c, packs)
+      : offerPiecePrice({ price: c.upcoming!.price, base_price: c.base_price, mechanic }, packs);
+    const a = amountOf(c);
+    let lowest = Infinity;
+    let versus: Candidate | undefined;
+    for (const u of new Set([c, ...usual])) {
+      const ua = amountOf(u);
+      const price = a && ua && ua.unit === a.unit ? regular(u) / ua.value : !a ? regular(u) : null;
+      if (price != null && price < lowest) { lowest = price; versus = u; }
+    }
+    const mine = a ? piece / a.value : piece;
+    out.push({ cand: c, mechanic, from: c.mechanic ? undefined : c.upcoming!.from, mine, lowest, per: a?.unit ?? null, versus, good: mine <= lowest * TOLERANCE });
+  }
+  return out;
 }
 
 /**
  * Wachtlijst: is er nu een goede deal voor dit product?
- * Ja als een passend (of zelf gekozen) product nu in de aanbieding is, of onder de richtprijs per stuk zit.
+ * Ja als er nu een goede aanbieding loopt, of als de prijs per stuk onder de richtprijs zit.
  */
 export function dealsFor(item: Item, cands: Candidate[]): Candidate[] {
-  const target = item.target_price == null ? null : Number(item.target_price);
-  const packs = packCount({ quantity: Number(item.quantity), unit: item.unit });
-  return dealPool(cands)
-    .filter((c) => (target != null ? evaluateOffer(c, packs).perUnit <= target : !!c.mechanic))
-    .map((c) => ({ ...c, alt: false }));
+  if (item.target_price != null) {
+    const target = Number(item.target_price);
+    const packs = packsOf(item);
+    const chosen = cands.filter((c) => c.pinned);
+    return (chosen.length ? chosen : cands.filter((c) => !c.weak))
+      .filter((c) => offerPiecePrice(c, packs) <= target)
+      .map((c) => ({ ...c, alt: false }));
+  }
+  return checkOffers(item, cands).filter((o) => o.good && !o.from).map((o) => ({ ...o.cand, alt: false }));
 }
 
-/** Wachtlijst: een actie die binnenkort begint ("vanaf maandag"). */
-export function upcomingFor(cands: Candidate[]): Candidate | undefined {
-  return dealPool(cands).filter((c) => c.upcoming).sort((a, b) => (a.upcoming!.from < b.upcoming!.from ? -1 : 1))[0];
+/** Wachtlijst: een goede aanbieding die binnenkort begint ("vanaf maandag"). */
+export function upcomingFor(item: Item, cands: Candidate[]): Candidate | undefined {
+  return checkOffers(item, cands).filter((o) => o.good && o.from).sort((a, b) => (a.from! < b.from! ? -1 : 1))[0]?.cand;
 }
 
-// Hebben jullie zelf een product gekozen, dan tellen alleen acties op dát product.
-function dealPool(cands: Candidate[]): Candidate[] {
-  const chosen = cands.filter((c) => c.pinned);
-  return chosen.length ? chosen : cands.filter((c) => !c.weak);
+/**
+ * Wachtlijst: een actie (nu of binnenkort) die níét telt, omdat je er duurder mee uit bent.
+ * Om uit te leggen waarom het product blijft wachten.
+ */
+export function skippedOffer(item: Item, cands: Candidate[]): OfferCheck | undefined {
+  if (item.target_price != null) return undefined;
+  const checks = checkOffers(item, cands);
+  return checks.some((o) => o.good) ? undefined : checks.sort((a, b) => a.mine / a.lowest - b.mine / b.lowest)[0];
+}
+
+const PER: Record<string, string> = { kg: ' per kilo', l: ' per liter', st: ' per stuk' };
+/** "€ 6,24 per kilo, terwijl AH Varkens knakworst € 3,23 per kilo kost" */
+export function explainSkipped(o: OfferCheck, euro: (n: number) => string): string {
+  const per = o.per ? PER[o.per] : '';
+  return `${euro(o.mine)}${per}${o.versus && o.versus !== o.cand ? `, terwijl ${o.versus.title} ${euro(o.lowest)}${per} kost` : ''}`;
 }
 
 /** Goedkoopste standaardkeus (voor "nu € … bij …" op de wachtlijst). */

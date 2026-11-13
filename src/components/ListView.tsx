@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Household, Item, Pins } from '../lib/types';
 import type { useLiveData } from '../lib/useHousehold';
 import type { Prefs } from '../lib/prefs';
-import { candidatesFor, cheapestUsed, dealsFor, upcomingFor } from '../lib/candidates';
+import { candidatesFor, cheapestUsed, dealsFor, explainSkipped, skippedOffer, upcomingFor } from '../lib/candidates';
 import { plan, type Assignment, type Candidate } from '../../shared/optimizer';
 import { CATEGORIES, CATEGORY_BY_ID } from '../../shared/catalog';
 import { euro, normalizeQuery, parseList } from '../../shared/text';
@@ -177,13 +177,14 @@ export default function ListView({ household, data, prefs, savePrefs, rememberPi
                 onChange={(e) => setWaitText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addWaiting(); }} />
               <button className="secondary" onClick={addWaiting}>Zet erop</button>
             </div>
-            <p className="muted small">Komt vanzelf op je lijst zodra het ergens in de aanbieding is (of onder je richtprijs zakt).</p>
+            <p className="muted small">Komt vanzelf op je lijst bij een goede aanbieding: niet duurder dan wat er nu al ligt. Of zodra het onder je richtprijs zakt.</p>
             {waiting.length > 0 && (
               <ul>
                 {waiting.map((i) => {
                   const cs = allCands[i.id] ?? [];
                   const cheapest = cheapestUsed(cs);
-                  const soon = upcomingFor(cs);
+                  const soon = upcomingFor(i, cs);
+                  const skipped = soon ? undefined : skippedOffer(i, cs);
                   const name = (id?: string) => stores.find((x) => x.id === id)?.name ?? '?';
                   return (
                     <li key={i.id} className="row" onClick={() => setOpenId(i.id)}>
@@ -195,6 +196,7 @@ export default function ListView({ household, data, prefs, savePrefs, rememberPi
                           {i.target_price != null ? ` · wacht op ≤ ${euro(Number(i.target_price))}` : ' · wacht op actie'}
                         </div>
                         {soon && <div className="soon">📅 Vanaf {fmtDate(soon.upcoming!.from)} bij {name(soon.store_id)}: {soon.upcoming!.mechanic}</div>}
+                        {skipped && <div className="skipped">Actie op {skipped.cand.title} ({skipped.mechanic}{skipped.from ? ` vanaf ${fmtDate(skipped.from)}` : ''}) telt niet: {explainSkipped(skipped, euro)}</div>}
                       </div>
                     </li>
                   );

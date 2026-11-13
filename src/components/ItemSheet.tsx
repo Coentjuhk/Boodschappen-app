@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Item, Pins, Store } from '../lib/types';
 import type { useLiveData } from '../lib/useHousehold';
-import { pinsOf } from '../lib/candidates';
+import { explainSkipped, pinsOf, skippedOffer } from '../lib/candidates';
 import { isUsed, packCount, type Assignment, type Candidate } from '../../shared/optimizer';
 import { evaluateOffer } from '../../shared/offers';
 import { AUTO_PRICE_CHAINS, CATEGORIES, CATEGORY_BY_ID } from '../../shared/catalog';
@@ -39,6 +39,8 @@ export default function ItemSheet({ item, stores, candidates, assignment, data, 
   );
   const [manualPrice, setManualPrice] = useState('');
   const [showAll, setShowAll] = useState<string | null>(null);
+  // Wachtlijst: een actie die niet telt omdat je er duurder mee uit bent (met uitleg en een uitweg)
+  const skipped = item.wait_offer ? skippedOffer(item, candidates) : undefined;
 
   // Per winkel: eerst wat meetelt, dan de alternatieven, dan de twijfelgevallen
   const order = (c: Candidate) => (isUsed(c) ? 0 : c.weak ? 2 : 1);
@@ -122,8 +124,14 @@ export default function ItemSheet({ item, stores, candidates, assignment, data, 
               <p className="muted small">
                 {item.target_price != null
                   ? 'Komt op de lijst als de prijs per stuk onder je richtprijs komt.'
-                  : 'Komt op de lijst zodra er een actie is. Tip: kies hieronder het juiste product, dan let de app alleen op acties voor dát product.'}
+                  : 'Komt op de lijst zodra een actie het niet duurder maakt dan wat je nu al kunt krijgen. Wil je één merk volgen? Kies dat product hieronder (📌), dan telt elke actie daarop.'}
               </p>
+              {skipped && (
+                <p className="small skip-note">
+                  Actie op <strong>{skipped.cand.title}</strong> ({skipped.mechanic}{skipped.from ? ` vanaf ${fmtDate(skipped.from)}` : ''}) telt niet: {explainSkipped(skipped, euro)}.{' '}
+                  <button className="link small" onClick={() => choose(skipped.cand)}>Toch dit product volgen</button>
+                </p>
+              )}
             </>
           )}
         </div>

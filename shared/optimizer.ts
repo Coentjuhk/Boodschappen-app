@@ -47,7 +47,7 @@ export interface Candidate extends PricedProduct {
   /** Eigen prijs: zelf ingevuld of van een kassabon. */
   learned?: boolean;
   /** Actie die nog moet beginnen ("vanaf maandag in de bonus"). */
-  upcoming?: { mechanic: string; from: string } | null;
+  upcoming?: { mechanic: string; from: string; price: number } | null;
 }
 
 /** Telt deze kandidaat mee bij het kiezen van de winkel? */
