@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { readText } from '../lib/ocr';
+import { readReceipts } from '../lib/ocr';
 import { looselyMatches, wordsOf } from '../../shared/match';
 import type { Item, Store } from '../lib/types';
-import { netUnitPrice, parseReceipt, type ReceiptLine } from '../../shared/receipt';
+import { checkReceipt, netUnitPrice, type Receipt, type ReceiptLine } from '../../shared/receipt';
 import { euro } from '../../shared/text';
 
 interface Row { line: ReceiptLine; name: string; price: string; on: boolean }
-interface Bon { storeId: string; rows: Row[]; total: number | null; raw: string }
+interface Bon { storeId: string; rows: Row[]; receipt: Receipt; raw: string }
 
 /** Naam op de bon ("HALFV MELK") koppelen aan een product op jullie lijst ("Halfvolle melk"), als dat lukt. */
 function matchItem(receiptName: string, items: Item[]): string | null {
@@ -25,7 +25,7 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
   onClose: () => void;
 }) {
   const [bons, setBons] = useState<Bon[] | null>(null);
-  const [progress, setProgress] = useState<[number, number]>([0, 0]);
+  const [progress, setProgress] = useState<[number, number, number]>([0, 0, 0]);
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,10 +35,9 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
     let cancelled = false;
     (async () => {
       try {
-        const texts = await readText(files, (i, p) => !cancelled && setProgress([i, p]));
+        const read = await readReceipts(files, (i, p, pass) => !cancelled && setProgress([i, p, pass]));
         if (cancelled) return;
-        setBons(texts.map((raw) => {
-          const r = parseReceipt(raw);
+        setBons(read.map(({ receipt: r, text }) => {
           // Winkel van de bon: fysieke winkel van die keten (niet de bezorgdienst), anders de eerste
           const store =
             stores.find((s) => s.enabled && r.chain && s.chain === r.chain && !s.online) ??
@@ -47,8 +46,8 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
             stores[0];
           return {
             storeId: store?.id ?? '',
-            total: r.total,
-            raw,
+            receipt: r,
+            raw: text,
             rows: r.lines.map((line) => ({ line, name: matchItem(line.name, items) ?? line.name, price: line.price.toFixed(2).replace('.', ','), on: true })),
           };
         }));
@@ -70,7 +69,7 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
       for (const bon of bons) {
         const entries = bon.rows
           .filter((r) => r.on && r.name.trim())
-          .map((r) => ({ name: r.name.trim(), price: Number(r.price.replace(',', '.')), title: r.line.name }))
+          .map((r) => ({ name: r.name.trim(), price: Number(r.price.replace(',', '.')), title: r.line.perKg ? `${r.line.name} (per kilo)` : r.line.name }))
           .filter((e) => e.price > 0);
         if (bon.storeId && entries.length) { await onSave(bon.storeId, entries); n += entries.length; }
       }
@@ -92,8 +91,8 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
 
         {!bons && !err && (
           <div className="reading">
-            <div><span className="spinner" /> Bon {progress[0] + 1} van {files.length} lezen… {Math.round(progress[1] * 100)}%</div>
-            <p className="muted small">De eerste keer duurt dit wat langer (taalbestand downloaden).</p>
+            <div><span className="spinner" /> Bon {progress[0] + 1} van {files.length} {progress[2] ? 'nog eens nauwkeurig lezen' : 'lezen'}… {Math.round(progress[1] * 100)}%</div>
+            <p className="muted small">De eerste keer duurt dit wat langer (taalbestand downloaden). Klopt een bon niet met zijn eigen totaal, dan leest de app hem nog een keer.</p>
           </div>
         )}
         {err && <p className="error">{err}</p>}
@@ -106,26 +105,41 @@ export default function ReceiptSheet({ files, stores, items, onSave, onClose }: 
 
         {bons && !saved && (
           <>
-            <p className="muted small">Controleer de namen: gebruik dezelfde naam als op je lijst (bv. "Halfvolle melk"), dan koppelt de app de prijs. Tik ✓ uit voor regels die niet kloppen.</p>
+            <p className="muted small">De app bewaart de gewone prijs per stuk (bij gewogen producten per kilo). Namen die op je lijst voorkomen zijn al gekoppeld; een prijs telt later ook mee als de naam bijna gelijk is. Tik ✓ uit voor regels die niet kloppen.</p>
             {bons.map((bon, b) => {
-              // Ter controle: zelfde som als de bon (inclusief kortingen), dan is alles goed gelezen
-              const sum = bon.rows.reduce((t, r) => t + (Number(r.price.replace(',', '.')) || 0) * r.line.quantity - (r.line.discount ?? 0), 0);
+              // Ter controle: kloppen de regels met het totaal (en de totale besparing) op de bon zelf?
+              const check = checkReceipt(bon.receipt);
+              const doubts = bon.rows.filter((r) => r.line.unsure).length;
               return (
                 <div key={b} className="bon">
                   <div className="bon-head">
                     <select value={bon.storeId} onChange={(e) => setBons(bons.map((x, i) => (i === b ? { ...x, storeId: e.target.value } : x)))}>
                       {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    <span className="muted small">{bon.rows.length} regels{bon.total ? ` · bon ${euro(bon.total)}` : ''} · gelezen {euro(sum)}{bon.total && Math.abs(bon.total - sum) < 0.02 ? ' ✓' : ''}</span>
+                    <span className="muted small">
+                      {bon.rows.length} regels{bon.receipt.total != null ? ` · bon ${euro(bon.receipt.total)}` : ''}
+                      {check?.ok && <span className="save"> · ✓ klopt met het totaal van de bon</span>}
+                    </span>
                   </div>
-                  {bon.rows.length === 0 && <p className="warn small">Geen producten gevonden op deze foto. Fotografeer de bon recht van boven, plat en met goed licht.</p>}
+                  {bon.rows.length > 0 && check && !check.ok && (
+                    <p className="warn small">De gelezen regels wijken {euro(Math.abs(check.expected - check.got))} af van het totaal op de bon. Er is dus nog iets verkeerd gelezen: loop de prijzen even na{doubts ? `, vooral de ${doubts === 1 ? 'regel' : `${doubts} regels`} met ⚠️` : ''}.</p>
+                  )}
+                  {bon.rows.length === 0 && <p className="warn small">Geen producten gevonden op deze foto. De gedeelde bon uit de Lidl Plus-app of een schermafdruk werkt het best; een foto maak je recht van boven, plat en met goed licht.</p>}
                   <ul className="ingredients">
                     {bon.rows.map((r, j) => (
                       <li key={j} className={r.on ? 'on' : ''}>
                         <button className={'check' + (r.on ? ' on' : '')} onClick={() => update(b, j, { on: !r.on })}>{r.on ? '✓' : ''}</button>
                         <div className="info">
                           <input className="name plain" value={r.name} onChange={(e) => update(b, j, { name: e.target.value })} />
-                          <div className="muted small">{r.line.raw}{r.line.discount ? ` · met korting ${euro(netUnitPrice(r.line))} p/st (normale prijs bewaard)` : ''}</div>
+                          <div className="muted small">
+                            {r.line.unsure ? '⚠️ ' : ''}{r.line.perKg ? 'per kilo · ' : r.line.quantity > 1 ? `${r.line.quantity} stuks · ` : ''}{r.line.raw}
+                            {r.line.discount ? ` · met korting ${euro(netUnitPrice(r.line))}${r.line.perKg ? '' : ' p/st'} (gewone prijs bewaard)` : ''}
+                          </div>
+                          {r.line.alt != null && !r.line.perKg && (
+                            <button className="link small alt-price" onClick={() => update(b, j, { price: (r.line.alt! / r.line.quantity).toFixed(2).replace('.', ',') })}>
+                              Of is het {euro(r.line.alt / r.line.quantity)}? Tik om over te nemen
+                            </button>
+                          )}
                         </div>
                         <input className="bon-price" inputMode="decimal" value={r.price} onChange={(e) => update(b, j, { price: e.target.value })} />
                       </li>

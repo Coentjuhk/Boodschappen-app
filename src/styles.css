@@ -208,3 +208,4 @@ input[type=range] { padding: 0; border: 0; background: none; accent-color: var(-
 .skipped { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .skip-note { color: var(--muted); margin: 6px 0 2px; }
 .skip-note .link { padding: 0; text-decoration: underline; }
+.alt-price { padding: 2px 0; text-decoration: underline; color: var(--offer); }
